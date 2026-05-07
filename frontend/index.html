@@ -383,8 +383,17 @@
 </div>
 
 <script src="/config.js"></script>
+
 <script>
-const API = window.APP_CONFIG.API_URL;
+window.addEventListener("load", () => {
+  if (!window.APP_CONFIG) {
+    throw new Error("APP_CONFIG not loaded");
+  }
+
+  const API = window.APP_CONFIG.API_URL;
+  console.log("API:", API);
+});
+</script>
 
 function classifyStock(qty, threshold) {
   if (qty === 0 || qty <= threshold * 0.3) return 'critical';
