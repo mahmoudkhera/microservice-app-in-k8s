@@ -21,12 +21,24 @@ resource "aws_instance" "this" {
   subnet_id                   = var.subnet_id
   key_name                    = var.key_name != "" ? var.key_name : null
   vpc_security_group_ids      = var.security_group_ids
-  iam_instance_profile        = var.iam_instance_profile != "" ? var.iam_instance_profile : null
+  iam_instance_profile        = var.iam_instance_profile_name != "" ? var.iam_instance_profile_name : null
   associate_public_ip_address = var.associate_public_ip
+  private_ip    = var.private_ip
   user_data                   =  local.user_data
 
 
+   root_block_device {
+    volume_size           = 30       # GB
+    volume_type           = "gp3"     # gp2, gp3, io1, io2, st1, sc1
+    iops                  = 3000      # for gp3/io1/io2
+    throughput            = 125       # MB/s, gp3 only
+    encrypted             = true
+    delete_on_termination = true
 
+    tags = {
+      Name = "root-volume"
+    }
+  }
 
   tags = merge(
     {

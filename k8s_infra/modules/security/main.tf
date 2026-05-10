@@ -8,9 +8,9 @@ resource "aws_security_group" "alb" {
 
 
     ingress {
-        from_port   = 80
-        to_port     = 80
-        protocol    = "tcp"
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
         cidr_blocks = ["0.0.0.0/0"]
     }
 
@@ -18,7 +18,7 @@ resource "aws_security_group" "alb" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.private_subnets
   }
    tags = {
     Name        = "${var.environment}-alb-sg"
@@ -44,7 +44,7 @@ resource "aws_security_group" "bastion_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.private_subnets
   }
 
    tags = {
@@ -53,17 +53,22 @@ resource "aws_security_group" "bastion_sg" {
   }
 }
 
-# nginx  Security Group
 resource "aws_security_group" "private_sg" {
-  name        = "${var.environment}-ngprivateinx-sg"
+  name        = "${var.environment}-private-sg"
   description = "Security group for k8s"
   vpc_id      = var.vpc_id
 
-  ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+ingress {
+  from_port       = 0
+  to_port         = 65535
+  protocol        = "tcp"
+  security_groups = [aws_security_group.alb.id]
+}
+    ingress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks =var.private_subnets
   }
 
   
@@ -84,7 +89,7 @@ resource "aws_security_group" "private_sg" {
   }
 
   tags = {
-    Name        = "${var.environment}-pprivate-sg"
+    Name        = "${var.environment}-private-sg"
     Environment = var.environment
   }
 }

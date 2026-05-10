@@ -19,7 +19,7 @@ resource "aws_lb" "main" {
 
 resource "aws_lb_target_group" "main" {
   name     = "${var.environment}-tg"
-  port     = 80
+  port     = 30080
   protocol = "HTTP"
   vpc_id   = var.vpc_id
 
@@ -28,7 +28,7 @@ resource "aws_lb_target_group" "main" {
     healthy_threshold   = 2
     interval            = 30
     matcher             = "200"
-    path                = "/index.html"
+    path                = "/healthz"
     port                = "traffic-port"
     protocol            = "HTTP"
     timeout             = 5

@@ -71,10 +71,15 @@ variable "key_name" {
 
 
 
-variable "kubernetes_user_data" {
+variable "kubernetes_master_user_data" {
   description = "Path to user data template file"
   type        = string
   default = "./templates/k8s_setup.tpl"
+}
+variable "kubernetes_node_user_data" {
+  description = "Path to user data template file"
+  type        = string
+  default = "./templates/k8s_node.tpl"
 }
 
 variable "kubernetes_data_vars" {

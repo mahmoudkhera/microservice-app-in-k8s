@@ -34,11 +34,7 @@ variable "key_name" {
   default     = ""
 }
 
-variable "iam_instance_profile" {
-  description = "IAM instance profile name to attach (leave empty for none)"
-  type        = string
-  default     = ""
-}
+
 
 variable "associate_public_ip" {
   description = "Whether to associate a public IP address"
@@ -67,3 +63,14 @@ variable "kubernetes_data_vars" {
   default     = {}
 }
 
+
+variable "private_ip" {
+  description = "Private IP for EC2 instance"
+  type        = string
+}
+
+variable "iam_instance_profile_name" {
+  description = "IAM Instance Profile name for EC2"
+  type        = string
+  default=""
+}

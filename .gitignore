@@ -1,2 +1,6 @@
 .env
 /helm_chart/values.yaml
+/k8s_infra/terraform*
+/k8s_infra/.terraform*
+/k8s_infra/ec2-key.pem
+/k8s_infra/test.sh
