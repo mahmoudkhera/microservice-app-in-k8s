@@ -7,27 +7,25 @@ metadata:
     app: {{ .Values.appName }}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
-
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
-  - host:  {{ .Values.ingress.frontend_host }}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: {{.Values.frontend.serviceName}}
-            port: 
-              name: {{.Values.frontend.service.port_name}}
-  - host: {{ .Values.ingress.inventory_host }}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: {{.Values.inventory.serviceName}}
-            port:
-              name: {{.Values.inventory.service.port_name}}
+    - http:
+        paths:
+
+        - path: /backend(/|$)(.*)
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: {{ .Values.inventory.serviceName }}
+              port:
+                name: {{ .Values.inventory.service.port_name }}
+
+        - path: /()(.*)
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: {{ .Values.frontend.serviceName }}
+              port:
+                name: {{ .Values.frontend.service.port_name }}

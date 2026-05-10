@@ -1,0 +1,22 @@
+frontend:
+  appName: frontend-app
+
+
+  image_name: mahmoudkhera/devops2-frontend
+  image_tag: "3eba442cdea3012eb6310ea553acada1e8d9de33"
+  
+  serviceName: frontend
+  containerPort: 8000
+  service:
+    port_name: frontend-port
+    # ClusterIP for internal, NodePort for Minikube external access, LoadBalancer for cloud
+    type: ClusterIP
+    port: 8000              # Port other services hit (e.g., http://frontend:80)
+    targetPort: 8000       # Port your container actually listens on
+    #nodePort: 30080     # Only used when type=NodePort; omit to let k8s pick (30000-32767)
+  configmap:
+    name: frontend
+    data:
+      HOST: '0.0.0.0'
+      PORT: '8000'
+      API: "http://frontend.192.168.49.2.nip.io/backend"

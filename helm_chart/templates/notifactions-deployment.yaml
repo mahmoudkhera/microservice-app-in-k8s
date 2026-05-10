@@ -19,9 +19,9 @@ spec:
     spec: 
       containers:
       - name: notifications
-        image: "{{ .Values.notifactions.image.name }}:{{ .Values.notifactions.image.tag }}"
+        image: "{{ .Values.notifactions.image_name }}:{{ .Values.notifactions.image_tag }}"
         ports:
-        - containerPort: {{.Values.notifactions.port}}
+        - containerPort: {{.Values.notifactions.containerPort}}
         envFrom:
         - configMapRef:
             name: {{ .Values.notifactions.configmap.name }}

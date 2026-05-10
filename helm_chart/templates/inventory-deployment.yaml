@@ -19,9 +19,9 @@ spec:
     spec: 
       containers:
       - name: inventory
-        image: "{{ .Values.inventory.image.name }}:{{ .Values.inventory.image.tag }}"
+        image: "{{ .Values.inventory.image_name }}:{{ .Values.inventory.image_tag }}"
         ports:
-        - containerPort: {{.Values.inventory.port}}
+        - containerPort: {{.Values.inventory.containerPort}}
         envFrom:
         - configMapRef:
             name: {{ .Values.inventory.configmap.name }}

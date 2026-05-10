@@ -19,9 +19,9 @@ spec:
     spec: 
       containers:
       - name: frontend
-        image: "{{ .Values.frontend.image.name }}:{{ .Values.frontend.image.tag }}"
+        image: "{{ .Values.frontend.image_name }}:{{ .Values.frontend.image_tag }}"
         ports:
-        - containerPort: {{.Values.frontend.port}}
+        - containerPort: {{.Values.frontend.containerPort}}
         envFrom:
         - configMapRef:
             name: {{ .Values.frontend.configmap.name }}

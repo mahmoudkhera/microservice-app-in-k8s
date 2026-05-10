@@ -6,4 +6,4 @@ metadata:
 data:
   FRONTEND_PORT: {{ .Values.frontend.configmap.data.PORT | quote}}
   FRONTEND_HOST: {{ .Values.frontend.configmap.data.HOST | quote}}
-  API: {{ .Values.frontend.configmap.data.API | quote}}
+  API: {{ .Values.frontend.configmap.data.API }}

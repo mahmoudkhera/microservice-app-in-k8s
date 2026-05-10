@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.inventory.serviceName }}
-  namespace: {{ .Values.namespace | default "default" }}
+  namespace: {{ .Values.namespace  }}
   labels:
     app: {{ .Values.inventory.appName}}
     tier: inventory

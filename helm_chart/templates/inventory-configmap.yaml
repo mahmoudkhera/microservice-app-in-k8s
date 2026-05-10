@@ -6,6 +6,6 @@ metadata:
 data:
   PORT: {{ .Values.inventory.configmap.data.PORT | quote}}                  
   HOST: {{ .Values.inventory.configmap.data.HOST | quote}} 
-  CORS_ORIGIN: {{ .Values.inventory.configmap.data.CORS_ORIGIN }} 
+  CORS_ORIGIN: {{ .Values.inventory.configmap.data.CORS_ORIGIN  |   quote}} 
   ALERT_RECIPIENT: {{ .Values.inventory.configmap.data.ALERT_RECIPIENT }} 
   NOTIFICATION_URL: {{ .Values.inventory.configmap.data.NOTIFICATION_URL }} 
