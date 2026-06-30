@@ -101,7 +101,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     outputs:
-     tag: ${{ steps.set-tag.outputs.tag }}
+     frontend_tag: ${{ steps.set-tag.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -143,6 +143,8 @@ jobs:
         github.event.inputs.frontend_tag != ''                       
       )
     runs-on: ubuntu-latest
+    outputs:
+     inventory_tag: ${{ steps.set-tag.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -189,6 +191,8 @@ jobs:
         github.event.inputs.frontend_tag != ''                       
       )
     runs-on: ubuntu-latest
+    outputs:
+     notifications_tag: ${{ steps.set-tag.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -225,119 +229,119 @@ jobs:
  
  
  
-  # integration-test:
+  integration-test:
       
-  #     name: Integration Test
-  #     needs: [detect-changes,build-frontend, build-inventory, build-notifications]
-  #     if: |
-  #       always() &&
-  #       !failure() &&
-  #       (needs.build-frontend.result == 'success' ||
-  #       needs.build-inventory.result == 'success' ||
-  #       needs.build-notifications.result == 'success')
-  #     runs-on: ubuntu-latest
-  #     environment: 'dev-env'
-  #     env:
-  #       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-  #       VERSION: ${{ github.sha }}
-  #       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-  #       SMTP_USER: ${{ secrets.SMTP_USER }}
-  #       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-  #       SMTP_HOST: ${{ vars.SMTP_HOST }}
-  #       SMTP_PORT: ${{ vars.SMTP_PORT }}
-  #       SMTP_FROM: ${{ vars.SMTP_FROM }}
-  #       ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
+      name: Integration Test
+      needs: [build-frontend, build-inventory, build-notifications]
+      if: |
+        always() &&
+        !failure() &&
+        (needs.build-frontend.result == 'success' ||
+        needs.build-inventory.result == 'success' ||
+        needs.build-notifications.result == 'success')
+      runs-on: ubuntu-latest
+      environment: 'dev-env'
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        VERSION: ${{ github.sha }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        SMTP_USER: ${{ secrets.SMTP_USER }}
+        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        SMTP_HOST: ${{ vars.SMTP_HOST }}
+        SMTP_PORT: ${{ vars.SMTP_PORT }}
+        SMTP_FROM: ${{ vars.SMTP_FROM }}
+        ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
   
-  #     steps:
-  #       - name: Checkout
-  #         uses: actions/checkout@v4
-  #       - name: Debug env variables
-  #         run: |
-  #           echo "DOCKER_USERNAME=$DOCKER_USERNAME"
-  #           echo "VERSION=$VERSION"
-  #           echo "SMTP_HOST=$SMTP_HOST"
-  #           echo "SMTP_PORT=$SMTP_PORT"
-  #       - name: Login to Docker Hub
-  #         uses: docker/login-action@v3
-  #         with:
-  #           username: ${{ secrets.DOCKER_USERNAME }}
-  #           password: ${{ secrets.DOCKER_PASS }}
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Debug env variables
+          run: |
+            echo "DOCKER_USERNAME=$DOCKER_USERNAME"
+            echo "VERSION=$VERSION"
+            echo "SMTP_HOST=$SMTP_HOST"
+            echo "SMTP_PORT=$SMTP_PORT"
+        - name: Login to Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: ${{ secrets.DOCKER_USERNAME }}
+            password: ${{ secrets.DOCKER_PASS }}
     
-  #       - name: Set image versions
-  #         run: |
-  #          # If service was just built this run, use current SHA
-  #          # Otherwise read the last SHA that was successfully built from cache
-  #           if [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
-  #                FRONTEND_VERSION="${{ github.sha }}"
-  #           else
-  #                FRONTEND_VERSION=$(cat frontend-sha.txt 2>/dev/null || echo "last version")
-  #           fi
+        - name: Set image versions
+          run: |
+           # If service was just built this run, use current SHA
+           # Otherwise read the last SHA that was successfully built
+            if [ "${{ github.event.inputs.frontend_tag }}" == "latest" ]; then
+                 FRONTEND_VERSION="latest"
+            else
+                 FRONTEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-frontend/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+            fi
 
-  #           if [ "${{ needs.detect-changes.outputs.inventory }}" == "true" ]; then
-  #             BACKEND_VERSION="${{ github.sha }}"
-  #           else
-  #             BACKEND_VERSION=$(cat backend-sha.txt 2>/dev/null || echo "last version")
-  #           fi
+             if [ "${{ github.event.inputs.inventory_tag}}" = "latest" ]; then
+              BACKEND_VERSION="latest"
+            else
+              BACKEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-inventory/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+            fi
 
-  #           if [ "${{ needs.detect-changes.outputs.notifications }}" == "true" ]; then
-  #              notifications_VERSION="${{ github.sha }}"
-  #           else
-  #             notifications_VERSION=$(cat notifications-sha.txt 2>/dev/null || echo "last version")
-  #           fi
+             if [ "${{ github.event.inputs.notifications_tag}}" = "latest" ]; then
+               notifications_VERSION="latest"
+            else
+              notifications_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-notifications/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+            fi
 
-  #           echo "FRONTEND_VERSION=$FRONTEND_VERSION"         >> $GITHUB_ENV
-  #           echo "BACKEND_VERSION=$BACKEND_VERSION"           >> $GITHUB_ENV
-  #           echo "notifications_VERSION=$notifications_VERSION" >> $GITHUB_ENV
+            echo "FRONTEND_VERSION=$FRONTEND_VERSION"         >> $GITHUB_ENV
+            echo "BACKEND_VERSION=$BACKEND_VERSION"           >> $GITHUB_ENV
+            echo "notifications_VERSION=$notifications_VERSION" >> $GITHUB_ENV
 
-  #           echo "Frontend  → $FRONTEND_VERSION"
-  #           echo "Backend   → $BACKEND_VERSION"
-  #           echo "notifications → $notifications_VERSION"
+            echo "Frontend  → $FRONTEND_VERSION"
+            echo "Backend   → $BACKEND_VERSION"
+            echo "notifications → $notifications_VERSION"
 
 
-  #       - name: Pull images
-  #         run: |
-  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-frontend:${FRONTEND_VERSION}
-  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${BACKEND_VERSION}
-  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${NOTIFICATIONS_VERSION}
+        - name: Pull images
+          run: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-frontend:${FRONTEND_VERSION}
+            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${BACKEND_VERSION}
+            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${NOTIFICATIONS_VERSION}
       
-  #       - name: Start services with docker compose
-  #         run: docker compose -f tests/docker-compose.yaml up -d
+        - name: Start services with docker compose
+          run: docker compose -f tests/docker-compose.yaml up -d
   
-  #       - name: Wait for services to be ready
-  #         run: |
-  #          echo "Waiting for services..."
-  #          for i in {1..20}; do
-  #             inventory=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
-  #             NOITICATION=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/health || true)
-  #             FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || true)
+        - name: Wait for services to be ready
+          run: |
+           echo "Waiting for services..."
+           for i in {1..20}; do
+              inventory=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
+              NOITICATION=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/health || true)
+              FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || true)
         
-  #             echo "Attempt $i:"
-  #             echo "  frontend: $FRONTEND"
-  #             echo "  inventory:  $inventory"
-  #             echo "  notifications: $NOITICATION"
+              echo "Attempt $i:"
+              echo "  frontend: $FRONTEND"
+              echo "  inventory:  $inventory"
+              echo "  notifications: $NOITICATION"
         
-  #             if [ "$FRONTEND" = "200" ] && [ "$inventory" = "200" ] && [ "$NOITICATION" = "200" ]; then
-  #               echo " All services responding"
-  #               break
-  #             fi
+              if [ "$FRONTEND" = "200" ] && [ "$inventory" = "200" ] && [ "$NOITICATION" = "200" ]; then
+                echo " All services responding"
+                break
+              fi
         
-  #             sleep 2
-  #           done
+              sleep 2
+            done
   
-  #       - name: Run integration tests
-  #         run: bash ./tests/integration-tests.sh
+        - name: Run integration tests
+          run: bash ./tests/integration-tests.sh
   
-  #       - name: Dump logs on failure        
-  #         if: failure()
-  #         run: |
-  #           echo "═══ FRONTEND LOGS ═══"
-  #           docker logs ci-frontend || true
-  #           echo "═══ INVENTORY LOGS ═══"
-  #           docker logs ci-inventory || true
-  #           echo "═══ notifications LOGS ═══"
-  #           docker logs ci-notifications || true  
+        - name: Dump logs on failure        
+          if: failure()
+          run: |
+            echo "═══ FRONTEND LOGS ═══"
+            docker logs ci-frontend || true
+            echo "═══ INVENTORY LOGS ═══"
+            docker logs ci-inventory || true
+            echo "═══ notifications LOGS ═══"
+            docker logs ci-notifications || true  
   
-  #       - name: Cleanup
-  #         if: always()
-  #         run: docker compose -f tests/docker-compose.yaml down -v 
+        - name: Cleanup
+          if: always()
+          run: docker compose -f tests/docker-compose.yaml down -v 
 
