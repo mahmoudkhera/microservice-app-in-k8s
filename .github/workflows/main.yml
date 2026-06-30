@@ -124,8 +124,9 @@ jobs:
             project: ${{ matrix.service }}
             path: ${{ matrix.service }}
             format: 'HTML'
-            args: --data ${{ github.workspace }}/depcheck-data --failOnCVSS 7 --nvdApiKey ${{ secrets.NVD_API_KEY }} --suppression suppression.xml
-
+            args: >
+              --failOnCVSS 7
+              --nvdApiKey ${{ secrets.NVD_API_KEY }}
 
           # Keep the report even when the scan fails the build — that's when you most want it.
         - name: Upload report
@@ -139,12 +140,9 @@ jobs:
   build-frontend:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() &&
-        needs.vulnerability-scanning.result == 'success' && (            
-       ( needs.detect-changes.result == 'success' &&
-        contains(fromJson(needs.detect-changes.outputs.services), 'frontend') ) ||  
-        github.event.inputs.frontend_tag != ''                       
-      )
+      success() &&
+       ( contains(fromJson(needs.detect-changes.outputs.services), 'frontend')  ||  
+        github.event.inputs.frontend_tag != '')
     runs-on: ubuntu-latest
     outputs:
      frontend_tag: ${{ steps.set-tag.outputs.tag }}
@@ -183,12 +181,9 @@ jobs:
   build-inventory:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() && 
-      needs.vulnerability-scanning.result == 'success' && (            
-      ( needs.detect-changes.result == 'success' &&
-        contains(fromJson(needs.detect-changes.outputs.services), 'inventory-service') ) ||  
-        github.event.inputs.frontend_tag != ''                       
-      )
+      success() &&
+       ( contains(fromJson(needs.detect-changes.outputs.services), 'inventory-service')  ||  
+        github.event.inputs.frontend_tag != '')
     runs-on: ubuntu-latest
     outputs:
      inventory_tag: ${{ steps.set-tag.outputs.tag }}
@@ -232,12 +227,9 @@ jobs:
   build-notifications:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() &&  
-        needs.vulnerability-scanning.result == 'success' &&(            
-      ( needs.detect-changes.result == 'success' &&
-        contains(fromJson(needs.detect-changes.outputs.services), 'notifications-service') ) ||  
-        github.event.inputs.frontend_tag != ''                       
-      )
+      success() &&
+       ( contains(fromJson(needs.detect-changes.outputs.services), 'notifications-service')  ||  
+        github.event.inputs.frontend_tag != '')
     runs-on: ubuntu-latest
     outputs:
      notifications_tag: ${{ steps.set-tag.outputs.tag }}
