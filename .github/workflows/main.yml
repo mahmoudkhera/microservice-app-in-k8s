@@ -67,8 +67,6 @@ jobs:
           echo "Matrix: $json"
         
 
-
-  
   vulnerability-scanning:
       needs: detect-changes
       runs-on: ubuntu-latest
@@ -90,9 +88,59 @@ jobs:
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
+  dependency-check:
+    needs: detect-changes
+    # skip the whole job cleanly when nothing changed 
+    if: |
+      !cancelled() &&
+      needs.detect-changes.result == 'success' &&
+      needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true    
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+    steps: 
+        - name: Checkout
+          uses: actions/checkout@v4
+        # Restore the NVD database so we don't re-download it every run.
+        # Key rotates daily so the DB stays fresh; restore-keys falls back to
+        # yesterday's cache and Dependency-Check just applies the delta.
+        - name: Get date
+          id: date
+          run: echo "today=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+        - name: Cache NVD data
+          uses: actions/cache@v4
+          with:
+            path: ${{ github.workspace }}/depcheck-data
+            key: depcheck-nvd-${{ steps.date.outputs.today }}
+            restore-keys: |
+              depcheck-nvd-
+        - name: OWASP Dependency-Check (${{ matrix.service }})
+          uses: dependency-check/Dependency-Check_Action@main
+          with:
+            project: ${{ matrix.service }}
+            path: ${{ matrix.service }}
+            format: 'HTML'
+            args: >
+              --data ${{ github.workspace }}/depcheck-data
+              --failOnCVSS 7
+              --nvdApiKey ${{ secrets.NVD_API_KEY }}
+              --suppression suppression.xml
+
+          # Keep the report even when the scan fails the build — that's when you most want it.
+        - name: Upload report
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: depcheck-report-${{ matrix.service }}
+            path: ${{ github.workspace }}/reports
+
   
   build-frontend:
-    needs: [detect-changes, vulnerability-scanning]
+    needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
       !cancelled() && (            
        ( needs.detect-changes.result == 'success' &&
@@ -135,7 +183,7 @@ jobs:
 
 
   build-inventory:
-    needs: [detect-changes, vulnerability-scanning]
+    needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
       !cancelled() && (            
        ( needs.detect-changes.result == 'success' &&
@@ -183,7 +231,7 @@ jobs:
   
   
   build-notifications:
-    needs: [detect-changes, vulnerability-scanning]
+    needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
       !cancelled() && (            
        ( needs.detect-changes.result == 'success' &&
