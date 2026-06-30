@@ -274,28 +274,28 @@ jobs:
             if [ "${{ github.event.inputs.frontend_tag }}" == "latest" ]; then
                  FRONTEND_VERSION="latest"
             else
-                 FRONTEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-frontend/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+                 FRONTEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-frontend/tags?page_size=1&ordering=last_updated"   | jq -r '.results[0].name')
             fi
 
              if [ "${{ github.event.inputs.inventory_tag}}" = "latest" ]; then
               BACKEND_VERSION="latest"
             else
-              BACKEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-inventory/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+              BACKEND_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-inventory/tags?page_size=1&ordering=last_updated"   | jq -r '.results[0].name')
             fi
 
              if [ "${{ github.event.inputs.notifications_tag}}" = "latest" ]; then
                notifications_VERSION="latest"
             else
-              notifications_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-notifications/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
+              notifications_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-notifications/tags?page_size=1&ordering=last_updated"   | jq -r '.results[0].name')
             fi
 
             echo "FRONTEND_VERSION=$FRONTEND_VERSION"         >> $GITHUB_ENV
             echo "BACKEND_VERSION=$BACKEND_VERSION"           >> $GITHUB_ENV
-            echo "notifications_VERSION=$notifications_VERSION" >> $GITHUB_ENV
+            echo "NOTIFICATIONS_VERSION=$notifications_VERSION" >> $GITHUB_ENV
 
             echo "Frontend  → $FRONTEND_VERSION"
             echo "Backend   → $BACKEND_VERSION"
-            echo "notifications → $notifications_VERSION"
+            echo "notifications → $NOTIFICATIONS_VERSION"
 
 
         - name: Pull images
