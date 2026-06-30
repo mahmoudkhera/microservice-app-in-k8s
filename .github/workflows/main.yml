@@ -6,24 +6,19 @@ on:
       frontend_tag:
         description: "Frontend image tag "
         required: true
-        type: choice
-        options:
-          - latest       
-          - commited 
+        type: string
+        default: "latest"
+
       inventory_tag:
         description: "Inventory image tag "
         required: true
-        type: choice
-        options:
-          - latest       
-          - commited 
+        type: string
+        default: "latest"
       notifications_tag:
         description: "notifications image tag "
         required: true
-        type: choice
-        options:
-          - latest       
-          - commited 
+        type: string
+        default: "latest"
   push:
     branches: [main]
     paths:
@@ -36,14 +31,12 @@ on:
     
 jobs:
   detect-changes:
-    if: |
-      github.event_name == 'push' 
+    if: github.event_name == 'push' 
       
     runs-on: ubuntu-latest
+
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
-      inventory: ${{ steps.filter.outputs.inventory }}
-      notifications: ${{ steps.filter.outputs.notifications }}
+      services: ${{ steps.set-matrix.outputs.services }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -56,22 +49,31 @@ jobs:
               - 'inventory-service/**'
             notifications:
               - 'notifications-service/**'
+      - name: build matrix
+        id : set-matrix 
+        run: |
+          services=()
+          [[ "${{steps.filter.outputs.frontend}}"== "true" ]] && service+('"frontend"')
+          [[ "${{ steps.filter.outputs.inventory }}" == "true" ]]     && services+=('"inventory-service"')
+          [[ "${{ steps.filter.outputs.notifications }}" == "true" ]] && services+=('"notifications-service"')
+
+          json="[$(IFS=,; echo "${services[*]}")]"
+          echo "services=$json" >> "$GITHUB_OUTPUT"
+          echo "Matrix: $json"
+        
+
+
+  
   vulnerability-scanning:
       needs: detect-changes
       runs-on: ubuntu-latest
       strategy:
         matrix:
-          service: [frontend, inventory-service, notifications-service]
+          service: ${{ fromJson(needs.detect-changes.outputs.services)}}
       
       steps:
         - uses: actions/checkout@v4
-        
-        
         - name: Scan ${{ matrix.service }}
-          if: |
-            (matrix.service == 'frontend' && needs.detect-changes.outputs.frontend == 'true') ||
-            (matrix.service == 'inventory-service' && needs.detect-changes.outputs.inventory == 'true') ||
-            (matrix.service == 'notifications-service' && needs.detect-changes.outputs.notifications == 'true')
           uses: sonarsource/sonarqube-scan-action@master
           with:
             projectBaseDir: ${{ matrix.service }}
@@ -87,9 +89,9 @@ jobs:
   build-frontend:
     needs: [detect-changes, vulnerability-scanning]
     if: |
-      !cancelled() && (
-      (needs.detect-changes.result == 'success' && needs.detect-changes.outputs.frontend == 'true') ||
-      github.event.inputs.frontend_tag != ''
+      !cancelled() && (                                              
+        contains(fromJson(needs.detect-changes.outputs.services), 'frontend') ||  
+        github.event.inputs.frontend_tag != ''                       
       )
     runs-on: ubuntu-latest
     outputs:
@@ -101,14 +103,14 @@ jobs:
       - name: Determine image tag
         id: set-tag
         run: |
-          if [ "${{ github.event.inputs.frontend_tag}}" = "latest" ]; then
+          if [ "${{github.event_name}}" = "workflow_dispatch"]; then
             TAG="${{ github.event.inputs.frontend_tag }}"
             echo "Using manual tag: $TAG"
           else
             TAG="${{ github.sha }}"
             echo "Using commit SHA: $TAG"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -117,9 +119,6 @@ jobs:
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
-      
-
-
       - name: Build and Push Image
         uses: docker/build-push-action@v5
         with:
@@ -127,231 +126,223 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/devops2-frontend:${{ steps.set-tag.outputs.tag }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/devops2-frontend:buildcache
-          
-     
-      - name: Save SHA to cache
-        run: echo "${{ steps.set-tag.outputs.tag }}" > frontend-sha.txt
-      - name: Cache frontend SHA
-        uses: actions/cache/save@v4
-        with:
-          path: frontend-sha.txt
-          key: frontend-last-sha
 
-  build-inventory:
-    needs: [detect-changes, vulnerability-scanning]
-    if: |
-      !cancelled() && (
-      (needs.detect-changes.result == 'success' && needs.detect-changes.outputs.inventory == 'true') ||
-      github.event.inputs.inventory_tag != ''
-      )
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Determine image tag
-        id: set-tag
-        run: |
-          if [ "${{ github.event.inputs.inventory_tag}}" = "latest" ]; then
-            TAG="${{ github.event.inputs.inventory_tag }}"
-            echo "Using manual tag: $TAG"
-          else
-            TAG="${{ github.sha }}"
-            echo "Using commit SHA: $TAG"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+  # build-inventory:
+  #   needs: [detect-changes, vulnerability-scanning]
+  #   if: |
+  #     !cancelled() && (
+  #     (needs.detect-changes.result == 'success' && needs.detect-changes.outputs.inventory == 'true') ||
+  #     github.event.inputs.inventory_tag != ''
+  #     )
+  #   runs-on: ubuntu-latest
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASS }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Determine image tag
+  #       id: set-tag
+  #       run: |
+  #         if [ "${{ github.event.inputs.inventory_tag}}" = "latest" ]; then
+  #           TAG="${{ github.event.inputs.inventory_tag }}"
+  #           echo "Using manual tag: $TAG"
+  #         else
+  #           TAG="${{ github.sha }}"
+  #           echo "Using commit SHA: $TAG"
+  #         fi
+  #         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Build and Push Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./inventory-service
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${{ steps.set-tag.outputs.tag }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/devops2-backend:buildcache
+  #     - name: Set up Buildx
+  #       uses: docker/setup-buildx-action@v3
+
+  #     - name: Build and Push Image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./inventory-service
+  #         push: true
+  #         tags: ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${{ steps.set-tag.outputs.tag }}
+  #         cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/devops2-backend:buildcache
           
   
-      - name: Save SHA to cache
-        run: echo "${{ steps.set-tag.outputs.tag }}" > inventory-sha.txt
-      - name: Cache frontend SHA
-        uses: actions/cache/save@v4
-        with:
-          path: inventory-sha.txt
-          key: inventory-last-sha
+  #     - name: Save SHA to cache
+  #       run: echo "${{ steps.set-tag.outputs.tag }}" > inventory-sha.txt
+  #     - name: Cache frontend SHA
+  #       uses: actions/cache/save@v4
+  #       with:
+  #         path: inventory-sha.txt
+  #         key: inventory-last-sha
   
   
-  build-notifications:
-    needs: [detect-changes, vulnerability-scanning]
-    if: |
-      !cancelled() && (
-      (needs.detect-changes.result == 'success' && needs.detect-changes.outputs.notifications == 'true') ||
-      github.event.inputs.notifications_tag != ''
-      )
-    runs-on: ubuntu-latest
+  # build-notifications:
+  #   needs: [detect-changes, vulnerability-scanning]
+  #   if: |
+  #     !cancelled() && (
+  #     (needs.detect-changes.result == 'success' && needs.detect-changes.outputs.notifications == 'true') ||
+  #     github.event.inputs.notifications_tag != ''
+  #     )
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Determine image tag
-        id: set-tag
-        run: |
-          if [ "${{ github.event.inputs.notifications_tag}}" = "latest" ]; then
-            TAG="${{ github.event.inputs.notifications_tag }}"
-            echo "Using manual tag: $TAG"
-          else
-            TAG="${{ github.sha }}"
-            echo "Using commit SHA: $TAG"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASS }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Determine image tag
+  #       id: set-tag
+  #       run: |
+  #         if [ "${{ github.event.inputs.notifications_tag}}" = "latest" ]; then
+  #           TAG="${{ github.event.inputs.notifications_tag }}"
+  #           echo "Using manual tag: $TAG"
+  #         else
+  #           TAG="${{ github.sha }}"
+  #           echo "Using commit SHA: $TAG"
+  #         fi
+  #         echo "tag=$TAG" >> $GITHUB_OUTPUT
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASS }}
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+  #     - name: Set up Buildx
+  #       uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./notifications-service
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${{ steps.set-tag.outputs.tag }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/devops2-notifications:buildcache
+  #     - name: Build and Push Image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./notifications-service
+  #         push: true
+  #         tags: ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${{ steps.set-tag.outputs.tag }}
+  #         cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/devops2-notifications:buildcache
           
  
-      - name: Save SHA to cache
-        run: echo "${{ steps.set-tag.outputs.tag }}" > notifications-sha.txt
-      - name: Cache frontend SHA
-        uses: actions/cache/save@v4
-        with:
-          path: notifications-sha.txt
-          key: notifications-last-sha
+  #     - name: Save SHA to cache
+  #       run: echo "${{ steps.set-tag.outputs.tag }}" > notifications-sha.txt
+  #     - name: Cache frontend SHA
+  #       uses: actions/cache/save@v4
+  #       with:
+  #         path: notifications-sha.txt
+  #         key: notifications-last-sha
  
  
  
-  integration-test:
+  # integration-test:
       
-      name: Integration Test
-      needs: [detect-changes,build-frontend, build-inventory, build-notifications]
-      if: |
-        always() &&
-        !failure() &&
-        (needs.build-frontend.result == 'success' ||
-        needs.build-inventory.result == 'success' ||
-        needs.build-notifications.result == 'success')
-      runs-on: ubuntu-latest
-      environment: 'dev-env'
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        VERSION: ${{ github.sha }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        SMTP_USER: ${{ secrets.SMTP_USER }}
-        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        SMTP_HOST: ${{ vars.SMTP_HOST }}
-        SMTP_PORT: ${{ vars.SMTP_PORT }}
-        SMTP_FROM: ${{ vars.SMTP_FROM }}
-        ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
+  #     name: Integration Test
+  #     needs: [detect-changes,build-frontend, build-inventory, build-notifications]
+  #     if: |
+  #       always() &&
+  #       !failure() &&
+  #       (needs.build-frontend.result == 'success' ||
+  #       needs.build-inventory.result == 'success' ||
+  #       needs.build-notifications.result == 'success')
+  #     runs-on: ubuntu-latest
+  #     environment: 'dev-env'
+  #     env:
+  #       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  #       VERSION: ${{ github.sha }}
+  #       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  #       SMTP_USER: ${{ secrets.SMTP_USER }}
+  #       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  #       SMTP_HOST: ${{ vars.SMTP_HOST }}
+  #       SMTP_PORT: ${{ vars.SMTP_PORT }}
+  #       SMTP_FROM: ${{ vars.SMTP_FROM }}
+  #       ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
   
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-        - name: Debug env variables
-          run: |
-            echo "DOCKER_USERNAME=$DOCKER_USERNAME"
-            echo "VERSION=$VERSION"
-            echo "SMTP_HOST=$SMTP_HOST"
-            echo "SMTP_PORT=$SMTP_PORT"
-        - name: Login to Docker Hub
-          uses: docker/login-action@v3
-          with:
-            username: ${{ secrets.DOCKER_USERNAME }}
-            password: ${{ secrets.DOCKER_PASS }}
+  #     steps:
+  #       - name: Checkout
+  #         uses: actions/checkout@v4
+  #       - name: Debug env variables
+  #         run: |
+  #           echo "DOCKER_USERNAME=$DOCKER_USERNAME"
+  #           echo "VERSION=$VERSION"
+  #           echo "SMTP_HOST=$SMTP_HOST"
+  #           echo "SMTP_PORT=$SMTP_PORT"
+  #       - name: Login to Docker Hub
+  #         uses: docker/login-action@v3
+  #         with:
+  #           username: ${{ secrets.DOCKER_USERNAME }}
+  #           password: ${{ secrets.DOCKER_PASS }}
     
-        - name: Set image versions
-          run: |
-           # If service was just built this run, use current SHA
-           # Otherwise read the last SHA that was successfully built from cache
-            if [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
-                 FRONTEND_VERSION="${{ github.sha }}"
-            else
-                 FRONTEND_VERSION=$(cat frontend-sha.txt 2>/dev/null || echo "last version")
-            fi
+  #       - name: Set image versions
+  #         run: |
+  #          # If service was just built this run, use current SHA
+  #          # Otherwise read the last SHA that was successfully built from cache
+  #           if [ "${{ needs.detect-changes.outputs.frontend }}" == "true" ]; then
+  #                FRONTEND_VERSION="${{ github.sha }}"
+  #           else
+  #                FRONTEND_VERSION=$(cat frontend-sha.txt 2>/dev/null || echo "last version")
+  #           fi
 
-            if [ "${{ needs.detect-changes.outputs.inventory }}" == "true" ]; then
-              BACKEND_VERSION="${{ github.sha }}"
-            else
-              BACKEND_VERSION=$(cat backend-sha.txt 2>/dev/null || echo "last version")
-            fi
+  #           if [ "${{ needs.detect-changes.outputs.inventory }}" == "true" ]; then
+  #             BACKEND_VERSION="${{ github.sha }}"
+  #           else
+  #             BACKEND_VERSION=$(cat backend-sha.txt 2>/dev/null || echo "last version")
+  #           fi
 
-            if [ "${{ needs.detect-changes.outputs.notifications }}" == "true" ]; then
-               notifications_VERSION="${{ github.sha }}"
-            else
-              notifications_VERSION=$(cat notifications-sha.txt 2>/dev/null || echo "last version")
-            fi
+  #           if [ "${{ needs.detect-changes.outputs.notifications }}" == "true" ]; then
+  #              notifications_VERSION="${{ github.sha }}"
+  #           else
+  #             notifications_VERSION=$(cat notifications-sha.txt 2>/dev/null || echo "last version")
+  #           fi
 
-            echo "FRONTEND_VERSION=$FRONTEND_VERSION"         >> $GITHUB_ENV
-            echo "BACKEND_VERSION=$BACKEND_VERSION"           >> $GITHUB_ENV
-            echo "notifications_VERSION=$notifications_VERSION" >> $GITHUB_ENV
+  #           echo "FRONTEND_VERSION=$FRONTEND_VERSION"         >> $GITHUB_ENV
+  #           echo "BACKEND_VERSION=$BACKEND_VERSION"           >> $GITHUB_ENV
+  #           echo "notifications_VERSION=$notifications_VERSION" >> $GITHUB_ENV
 
-            echo "Frontend  → $FRONTEND_VERSION"
-            echo "Backend   → $BACKEND_VERSION"
-            echo "notifications → $notifications_VERSION"
+  #           echo "Frontend  → $FRONTEND_VERSION"
+  #           echo "Backend   → $BACKEND_VERSION"
+  #           echo "notifications → $notifications_VERSION"
 
 
-        - name: Pull images
-          run: |
-            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-frontend:${FRONTEND_VERSION}
-            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${BACKEND_VERSION}
-            docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${NOTIFICATIONS_VERSION}
+  #       - name: Pull images
+  #         run: |
+  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-frontend:${FRONTEND_VERSION}
+  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-inventory:${BACKEND_VERSION}
+  #           docker pull ${{ secrets.DOCKER_USERNAME }}/devops2-notifications:${NOTIFICATIONS_VERSION}
       
-        - name: Start services with docker compose
-          run: docker compose -f tests/docker-compose.yaml up -d
+  #       - name: Start services with docker compose
+  #         run: docker compose -f tests/docker-compose.yaml up -d
   
-        - name: Wait for services to be ready
-          run: |
-           echo "Waiting for services..."
-           for i in {1..20}; do
-              inventory=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
-              NOITICATION=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/health || true)
-              FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || true)
+  #       - name: Wait for services to be ready
+  #         run: |
+  #          echo "Waiting for services..."
+  #          for i in {1..20}; do
+  #             inventory=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
+  #             NOITICATION=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/health || true)
+  #             FRONTEND=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ || true)
         
-              echo "Attempt $i:"
-              echo "  frontend: $FRONTEND"
-              echo "  inventory:  $inventory"
-              echo "  notifications: $NOITICATION"
+  #             echo "Attempt $i:"
+  #             echo "  frontend: $FRONTEND"
+  #             echo "  inventory:  $inventory"
+  #             echo "  notifications: $NOITICATION"
         
-              if [ "$FRONTEND" = "200" ] && [ "$inventory" = "200" ] && [ "$NOITICATION" = "200" ]; then
-                echo " All services responding"
-                break
-              fi
+  #             if [ "$FRONTEND" = "200" ] && [ "$inventory" = "200" ] && [ "$NOITICATION" = "200" ]; then
+  #               echo " All services responding"
+  #               break
+  #             fi
         
-              sleep 2
-            done
+  #             sleep 2
+  #           done
   
-        - name: Run integration tests
-          run: bash ./tests/integration-tests.sh
+  #       - name: Run integration tests
+  #         run: bash ./tests/integration-tests.sh
   
-        - name: Dump logs on failure        
-          if: failure()
-          run: |
-            echo "═══ FRONTEND LOGS ═══"
-            docker logs ci-frontend || true
-            echo "═══ INVENTORY LOGS ═══"
-            docker logs ci-inventory || true
-            echo "═══ notifications LOGS ═══"
-            docker logs ci-notifications || true  
+  #       - name: Dump logs on failure        
+  #         if: failure()
+  #         run: |
+  #           echo "═══ FRONTEND LOGS ═══"
+  #           docker logs ci-frontend || true
+  #           echo "═══ INVENTORY LOGS ═══"
+  #           docker logs ci-inventory || true
+  #           echo "═══ notifications LOGS ═══"
+  #           docker logs ci-notifications || true  
   
-        - name: Cleanup
-          if: always()
-          run: docker compose -f tests/docker-compose.yaml down -v 
+  #       - name: Cleanup
+  #         if: always()
+  #         run: docker compose -f tests/docker-compose.yaml down -v 
 
