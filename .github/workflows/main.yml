@@ -124,11 +124,8 @@ jobs:
             project: ${{ matrix.service }}
             path: ${{ matrix.service }}
             format: 'HTML'
-            args: >
-              --data ${{ github.workspace }}/depcheck-data
-              --failOnCVSS 7
-              --nvdApiKey ${{ secrets.NVD_API_KEY }}
-              --suppression suppression.xml
+            args: --data ${{ github.workspace }}/depcheck-data --failOnCVSS 7 --nvdApiKey ${{ secrets.NVD_API_KEY }} --suppression suppression.xml
+
 
           # Keep the report even when the scan fails the build — that's when you most want it.
         - name: Upload report
@@ -142,7 +139,8 @@ jobs:
   build-frontend:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() && (            
+      !cancelled() &&
+        needs.vulnerability-scanning.result == 'success' && (            
        ( needs.detect-changes.result == 'success' &&
         contains(fromJson(needs.detect-changes.outputs.services), 'frontend') ) ||  
         github.event.inputs.frontend_tag != ''                       
@@ -185,8 +183,9 @@ jobs:
   build-inventory:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() && (            
-       ( needs.detect-changes.result == 'success' &&
+      !cancelled() && 
+      needs.vulnerability-scanning.result == 'success' && (            
+      ( needs.detect-changes.result == 'success' &&
         contains(fromJson(needs.detect-changes.outputs.services), 'inventory-service') ) ||  
         github.event.inputs.frontend_tag != ''                       
       )
@@ -233,8 +232,9 @@ jobs:
   build-notifications:
     needs: [detect-changes, vulnerability-scanning,dependency-check]
     if: |
-      !cancelled() && (            
-       ( needs.detect-changes.result == 'success' &&
+      !cancelled() &&  
+        needs.vulnerability-scanning.result == 'success' &&(            
+      ( needs.detect-changes.result == 'success' &&
         contains(fromJson(needs.detect-changes.outputs.services), 'notifications-service') ) ||  
         github.event.inputs.frontend_tag != ''                       
       )
