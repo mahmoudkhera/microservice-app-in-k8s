@@ -58,7 +58,7 @@ jobs:
         id : set-matrix 
         run: |
           services=()
-          [[ "${{steps.filter.outputs.frontend}}"== "true" ]] && service+('"frontend"')
+          [[ "${{steps.filter.outputs.frontend}}" == "true" ]] && services+('"frontend"')
           [[ "${{ steps.filter.outputs.inventory }}" == "true" ]]     && services+=('"inventory-service"')
           [[ "${{ steps.filter.outputs.notifications }}" == "true" ]] && services+=('"notifications-service"')
 
