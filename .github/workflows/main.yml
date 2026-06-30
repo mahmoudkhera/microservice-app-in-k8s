@@ -89,8 +89,9 @@ jobs:
   build-frontend:
     needs: [detect-changes, vulnerability-scanning]
     if: |
-      !cancelled() && (                                              
-        contains(fromJson(needs.detect-changes.outputs.services), 'frontend') ||  
+      !cancelled() && (   
+       (needs.detect-changes.result == 'success' &&                                   
+        contains(fromJson(needs.detect-changes.outputs.services), 'frontend') ) ||  
         github.event.inputs.frontend_tag != ''                       
       )
     runs-on: ubuntu-latest
