@@ -1,5 +1,6 @@
 name: Build & Push with Version
-
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
@@ -70,6 +71,10 @@ jobs:
   vulnerability-scanning:
       needs: detect-changes
       runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        security-events: write   
+        pull-requests: write      
       strategy:
         matrix:
           service: ${{ fromJson(needs.detect-changes.outputs.services)}}
@@ -98,6 +103,10 @@ jobs:
       needs.detect-changes.result == 'success' &&
       needs.detect-changes.outputs.services != '[]'
     runs-on: ubuntu-latest
+    permissions:
+        contents: read
+        security-events: write   
+        pull-requests: write 
     strategy:
       fail-fast: true    
       matrix:
