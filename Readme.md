@@ -1266,7 +1266,7 @@ MIT — do whatever you want with this code.
 
 ## Acknowledgments
 This project is under continous devopment
-Built as a DevOps learning exercise by [Mohamed](https://github.com/mkmahmoud)
+Built as a DevOps learning exercise by [mahmooud](https://github.com/mkmahmoud)
  
 
 
