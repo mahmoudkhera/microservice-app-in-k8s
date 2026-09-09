@@ -1,0 +1,57 @@
+on:
+  workflow_call:
+    inputs:
+      dir:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+      run_checks:
+        type: boolean
+        default: true
+
+jobs:
+  sast:
+    if: inputs.run_checks
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep scan --config auto --error ${{ inputs.dir }}
+
+  deps:
+    if: inputs.run_checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.dir }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+  test:
+    if: inputs.run_checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ${{ inputs.dir }}/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest
