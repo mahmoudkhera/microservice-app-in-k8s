@@ -137,9 +137,9 @@ jobs:
           INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
           NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
         run: |
-           echo $ FRONTEND_IMAGE
-           echo $ INVENTORY_IMAGE
-           echo $ NOTIFICATIONS_IMAGE
+           echo $FRONTEND_IMAGE
+           echo $INVENTORY_IMAGE
+           echo $NOTIFICATIONS_IMAGE
   # build-frontend:
   #   needs: [detect-changes, vulnerability-scanning,dependency-check]
   #   if: |
