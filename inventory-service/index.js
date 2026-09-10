@@ -34,7 +34,7 @@ async function initDb(retries = 10) {
   for (let i = 0; i < retries; i++) {
     try {
       await pool.query('SELECT 1');
-      console.log('✓ Connected to Postgres');
+      console.log('✓ Connected to Postgres successfully');
       break;
     } catch (err) {
       console.log(`Waiting for Postgres... (${i + 1}/${retries})`);

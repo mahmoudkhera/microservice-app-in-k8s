@@ -80,7 +80,7 @@ def send_email(to, subject, message):
         raise
 
     except smtplib.SMTPServerDisconnected as err:
-        log.error(f'📡 SMTP server disconnected unexpectedly')
+        log.error(f'📡 SMTP server disconnected ')
         log.error(f'  Details: {err}')
         raise
 
