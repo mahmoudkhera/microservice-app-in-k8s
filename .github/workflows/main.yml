@@ -115,7 +115,7 @@ jobs:
       # unchanged services weren't rebuilt this run → fall back to last updated image
       - id: images
         run: |
-          REPO="${GITHUB_REPOSITORY#*/}
+          REPO="${GITHUB_REPOSITORY#*/}"
           pick() {
               LAST_UP=$(curl -s \
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
