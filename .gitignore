@@ -4,3 +4,5 @@
 /k8s_infra/.terraform*
 /k8s_infra/ec2-key.pem
 /k8s_infra/test.sh
+/frontend/node_modules
+/inventory-service/node_modules
