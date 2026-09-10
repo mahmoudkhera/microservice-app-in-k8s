@@ -122,9 +122,9 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$2/versions?per_page=1" \
                 | jq -r '.[0].metadata.container.tags[0]')
-                echo $LAST_UP
+             echo "Service=$2 LAST_UP=$LAST_UP" >&2    
 
-              [ "$1" = "true" ] && echo  "$REG/$2:$TAG" || "$REG/$2:$LAST_UP"
+              [ "$1" = "true" ] && echo  "$REG/$2:$TAG" || echo "$REG/$2:$LAST_UP"
           }
 
           echo "frontend=$(pick '${{ needs.changes.outputs.frontend }}' frontend)" >> "$GITHUB_OUTPUT"
