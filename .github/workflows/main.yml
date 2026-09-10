@@ -88,7 +88,58 @@ jobs:
       run_checks: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'full' }}
   
 
+  integration:
+    needs: [meta, changes, frontend, inventory, notifications]
+    if: >-
+      github.event_name != 'pull_request' &&
+      !cancelled() &&
+      !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REG: ghcr.io/${{ github.repository }}
+      TAG: ${{ needs.meta.outputs.tag }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+    steps:
+      - uses: actions/checkout@v5
 
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # unchanged services weren't rebuilt this run → fall back to last updated image
+      - id: images
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}
+          pick() {
+              LAST_UP=$(curl -s \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$2/versions?per_page=1" \
+                | jq -r '.[0].metadata.container.tags[0]')
+                echo $LAST_UP
+
+              [ "$1" = "true" ] && echo  "$REG/$2:$TAG" || "$REG/$2:$LAST_UP"
+          }
+
+          echo "frontend=$(pick '${{ needs.changes.outputs.frontend }}' frontend)" >> "$GITHUB_OUTPUT"
+          echo "inventory=$(pick '${{ needs.changes.outputs.inventory }}' inventory-service)" >> "$GITHUB_OUTPUT"
+          echo "notifications=$(pick '${{ needs.changes.outputs.notifications }}' notifications-service)" >> "$GITHUB_OUTPUT"
+
+      - name: Integration tests
+        env:
+          FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
+          INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
+          NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
+        run: |
+           echo $ FRONTEND_IMAGE
+           echo $ INVENTORY_IMAGE
+           echo $ NOTIFICATIONS_IMAGE
   # build-frontend:
   #   needs: [detect-changes, vulnerability-scanning,dependency-check]
   #   if: |
