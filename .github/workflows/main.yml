@@ -56,10 +56,13 @@ jobs:
       inventory:     ${{ steps.filter.outputs.inventory }}
       notifications: ${{ steps.filter.outputs.notifications }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0              
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: ${{ github.ref_name }}  
           filters: |
             frontend:
               - 'frontend/**'
