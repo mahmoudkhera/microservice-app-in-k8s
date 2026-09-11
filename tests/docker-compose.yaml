@@ -3,7 +3,7 @@
 services:
 
   inventory:
-    image: ${NOTIFICATIONS_IMAGE}
+    image: ${INVENTORY_IMAGE}
     container_name: ci-inventory
     environment:
       - PORT=3000
