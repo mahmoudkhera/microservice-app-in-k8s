@@ -161,15 +161,6 @@ jobs:
           FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
           INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
           NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          VERSION: ${{ github.sha }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_HOST: ${{ vars.SMTP_HOST }}
-          SMTP_PORT: ${{ vars.SMTP_PORT }}
-          SMTP_FROM: ${{ vars.SMTP_FROM }}
-          ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
         run: |
           docker pull "$FRONTEND_IMAGE"
           docker pull "$INVENTORY_IMAGE"
@@ -180,7 +171,16 @@ jobs:
           FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
           INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
           NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
-
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          VERSION: ${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_FROM: ${{ vars.SMTP_FROM }}
+          ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
+          
         run: docker compose -f tests/docker-compose.yaml up -d
 
       - name: Wait for services to be ready

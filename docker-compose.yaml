@@ -1,56 +1,51 @@
-version: '3.8'
-
 services:
   inventory:
-    build: ./inventory-service
+    image: ${INVENTORY_IMAGE}
     container_name: inventory
     ports:
-      - "${INVENTORY_PORT}:3000"
+      - "3000:3000"
     environment:
       - PORT=3000
-      - HOST=${INVENTORY_HOST}
-      - DATABASE_URL=${DATABASE_URL}
-      - CORS_ORIGIN=${CORS_ORIGIN}
+      - HOST=0.0.0.0
+      - DATABASE_URL=${DATABASE_URL:-sqlite::memory:}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:8000}
       - NOTIFICATION_URL=http://notification:3002/notify
-      - ALERT_RECIPIENT=${ALERT_RECIPIENT}
+      - ALERT_RECIPIENT=${ALERT_RECIPIENT:-test@example.com}
     networks:
       - stockwatch-net
-    restart: unless-stopped
 
-  frontend:
-    build: ./frontend
-    container_name: frontend
-    ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    environment:
-      - FRONTEND_PORT=${FRONTEND_PORT}
-      - FRONTEND_HOST=0.0.0.0
-      - API=${API}
-    depends_on:
-      - inventory
-    networks:
-      - stockwatch-net
-    restart: unless-stopped
-  
   notification:
-    build: ./notification-service
+    image: ${NOTIFICATIONS_IMAGE}
     container_name: notification
     ports:
-      - "${NOTIFICATION_PORT}:3002"
-    environment: 
-      - HOST=${NOTIFICATION_HOST}
-      - PORT=${NOTIFICATION_PORT}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM=${SMTP_FROM}
-    depends_on:
-      - inventory
+      - "3002:3002"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3002
+      - SMTP_HOST=${SMTP_HOST:-mailhog}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@example.com}
     networks:
       - stockwatch-net
-    restart: unless-stopped
 
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    container_name: frontend
+    ports:
+      - "8000:8000"
+    environment:
+      - FRONTEND_PORT=8000
+      - FRONTEND_HOST=0.0.0.0
+      - API=${API:-http://localhost:3000}
+    depends_on:
+      inventory:
+        condition: service_healthy
+      notification:
+        condition: service_healthy
+    networks:
+      - stockwatch-net
 
 networks:
   stockwatch-net:
