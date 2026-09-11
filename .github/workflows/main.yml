@@ -156,15 +156,63 @@ jobs:
           echo "inventory=$(pick '${{ needs.changes.outputs.inventory }}' inventory-service)"             >> "$GITHUB_OUTPUT"
           echo "notifications=$(pick '${{ needs.changes.outputs.notifications }}' notifications-service)" >> "$GITHUB_OUTPUT"
 
-      - name: Integration tests
+      - name: Pull images
         env:
           FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
           INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
           NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          VERSION: ${{ github.sha }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_FROM: ${{ vars.SMTP_FROM }}
+          ALERT_RECIPIENT: ${{ vars.ALERT_RECIPIENT }}
         run: |
-           echo $FRONTEND_IMAGE
-           echo $INVENTORY_IMAGE
-           echo $NOTIFICATIONS_IMAGE
+          docker pull "$FRONTEND_IMAGE"
+          docker pull "$INVENTORY_IMAGE"
+          docker pull "$NOTIFICATIONS_IMAGE"
+
+      - name: Start services with docker compose
+        env:
+          FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
+          INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
+          NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
+
+        run: docker compose -f tests/docker-compose.yaml up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services..."
+          for i in {1..20}; do
+            frontend=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/        || true)
+            inventory=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health || true)
+            notifications=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/health || true)
+
+            echo "Attempt $i: frontend=$frontend inventory=$inventory notifications=$notifications"
+
+            if [ "$frontend" = "200" ] && [ "$inventory" = "200" ] && [ "$notifications" = "200" ]; then
+              echo "All services responding"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::services did not become healthy in time"
+          exit 1
+
+      - name: Run integration tests
+        run: bash ./tests/integration-tests.sh
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose -f tests/docker-compose.yaml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f tests/docker-compose.yaml down -v
+        
   # build-frontend:
   #   needs: [detect-changes, vulnerability-scanning,dependency-check]
   #   if: |
