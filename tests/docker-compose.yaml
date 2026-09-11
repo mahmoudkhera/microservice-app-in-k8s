@@ -3,7 +3,7 @@
 services:
 
   inventory:
-    image: ${DOCKER_USERNAME}/devops2-inventory:${BACKEND_VERSION}
+    image: ${NOTIFICATIONS_IMAGE}
     container_name: ci-inventory
     environment:
       - PORT=3000
@@ -19,7 +19,7 @@ services:
       - ci-net
 
   notification:
-    image: ${DOCKER_USERNAME}/devops2-notifications:${NOTIFICATIONS_VERSION}
+    image: ${NOTIFICATIONS_IMAGE}
     container_name: ci-notification
     environment:
       - HOST=0.0.0.0
@@ -35,7 +35,7 @@ services:
       - ci-net
 
   frontend:
-    image: ${DOCKER_USERNAME}/devops2-frontend:${FRONTEND_VERSION}
+    image:  ${FRONTEND_IMAGE}
     container_name: ci-frontend
     environment:
       - PORT=8000
