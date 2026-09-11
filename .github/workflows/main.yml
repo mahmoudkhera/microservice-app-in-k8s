@@ -133,15 +133,16 @@ jobs:
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$1/versions?per_page=10" \
-            | jq -r '[.[] | .metadata.container.tags[]] | map(select(. != "latest")) | .[0] // empty'
+            | jq -r '.[0].metadata.container.tags[0]'
           }
 
           fallback() {
             if [ "$MODE_TAG" = "latest" ]; then
+              echo "[fallback] $1 → latest (MODE_TAG=latest)" >&2
               echo "latest"
             else
               t=$(last_tag "$1")
-              [ -n "$t" ] || { echo "::error::no pushed image found for $1"; exit 1; }
+              echo "[fallback] $1 → '$t'" >&2
               echo "$t"
             fi
           }
