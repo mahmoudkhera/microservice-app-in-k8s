@@ -11,6 +11,14 @@ on:
         options:
           - full          # sast + deps + test → build
           - build-only    # skip checks, build + image scan only
+      tag:
+        description: "Image tag"
+        type: choice
+        required: true
+        default: latest
+        options:
+          - latest        # moving tag
+          - commit        # short SHA of the commit being built
   push:
     branches: [main]
     paths:
@@ -114,21 +122,34 @@ jobs:
 
       # unchanged services weren't rebuilt this run → fall back to last updated image
       - id: images
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODE_TAG: ${{ inputs.tag || 'commit' }}      # push/PR runs have no input → behave like "commit"
         run: |
-          REPO="${GITHUB_REPOSITORY#*/}"
-          pick() {
-              LAST_UP=$(curl -s \
-                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$2/versions?per_page=1" \
-                | jq -r '.[0].metadata.container.tags[0]')
-             echo "Service=$2 LAST_UP=$LAST_UP" >&2    
+          REPO=${GITHUB_REPOSITORY##*/}
 
-              [ "$1" = "true" ] && echo  "$REG/$2:$TAG" || echo "$REG/$2:$LAST_UP"
+          last_tag() {
+            curl -sf \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$1/versions?per_page=10" \
+            | jq -r '[.[] | .metadata.container.tags[]] | map(select(. != "latest")) | .[0] // empty'
           }
 
-          echo "frontend=$(pick '${{ needs.changes.outputs.frontend }}' frontend)" >> "$GITHUB_OUTPUT"
-          echo "inventory=$(pick '${{ needs.changes.outputs.inventory }}' inventory-service)" >> "$GITHUB_OUTPUT"
+          fallback() {
+            if [ "$MODE_TAG" = "latest" ]; then
+              echo "latest"
+            else
+              t=$(last_tag "$1")
+              [ -n "$t" ] || { echo "::error::no pushed image found for $1"; exit 1; }
+              echo "$t"
+            fi
+          }
+
+          pick() { [ "$1" = "true" ] && echo "$REG/$2:$TAG" || echo "$REG/$2:$(fallback "$2")"; }
+
+          echo "frontend=$(pick '${{ needs.changes.outputs.frontend }}' frontend)"                        >> "$GITHUB_OUTPUT"
+          echo "inventory=$(pick '${{ needs.changes.outputs.inventory }}' inventory-service)"             >> "$GITHUB_OUTPUT"
           echo "notifications=$(pick '${{ needs.changes.outputs.notifications }}' notifications-service)" >> "$GITHUB_OUTPUT"
 
       - name: Integration tests
