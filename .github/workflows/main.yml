@@ -164,12 +164,16 @@ jobs:
           echo "frontend=$(pick '${{ needs.changes.outputs.frontend }}' frontend)"                        >> "$GITHUB_OUTPUT"
           echo "inventory=$(pick '${{ needs.changes.outputs.inventory }}' inventory-service)"             >> "$GITHUB_OUTPUT"
           echo "notifications=$(pick '${{ needs.changes.outputs.notifications }}' notifications-service)" >> "$GITHUB_OUTPUT"
+      # one env file, read by every compose invocation below
+      - name: Write compose env
+        run: |
+          cat > tests/.env <<EOF
+          FRONTEND_IMAGE=${{ steps.images.outputs.frontend }}
+          INVENTORY_IMAGE=${{ steps.images.outputs.inventory }}
+          NOTIFICATIONS_IMAGE=${{ steps.images.outputs.notifications }}
+          EOF
 
       - name: Pull images and start services
-        env:
-          FRONTEND_IMAGE:      ${{ steps.images.outputs.frontend }}
-          INVENTORY_IMAGE:     ${{ steps.images.outputs.inventory }}
-          NOTIFICATIONS_IMAGE: ${{ steps.images.outputs.notifications }}
         run: |
           docker pull "$FRONTEND_IMAGE"
           docker pull "$INVENTORY_IMAGE"
