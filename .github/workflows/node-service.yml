@@ -10,38 +10,23 @@ on:
       run_checks:
         type: boolean
         default: true
+    outputs:
+      digest:
+        value: ${{ jobs.build.outputs.digest }}
 
 
 jobs:
   sast:
     if: inputs.run_checks
-    runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
-    steps:
-      - uses: actions/checkout@v5
-      - name: Semgrep (ERROR → currently non-blocking)
-        continue-on-error: true          # TODO: remove to re-enable the gate
-        run: semgrep scan --config auto --severity ERROR --error ${{ inputs.dir }}
+    uses: ./.github/workflows/sast.yaml
+    with:
+      dir: ${{ inputs.dir }}
 
   deps:
     if: inputs.run_checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/trivy
-          key: trivy-db-${{ github.run_id }}
-          restore-keys: trivy-db-
-      - uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: ${{ inputs.dir }}
-          scanners: vuln
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '1'
+    uses: ./.github/workflows/depnd.yaml
+    with:
+      dir: ${{ inputs.dir }}
 
   test:
     if: inputs.run_checks
@@ -61,41 +46,15 @@ jobs:
     
   build:
     needs: [sast, deps, test]
-    runs-on: ubuntu-latest
+    # run when checks passed OR were skipped (run_checks=false); stop on failure
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    uses: ./.github/workflows/build.yaml
     permissions:
       contents: read
       packages: write
-    env:
-      IMAGE: ghcr.io/${{ github.repository }}/${{ inputs.dir }}:${{ inputs.tag }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: ${{ inputs.dir }}
-          load: true
-          tags: ${{ env.IMAGE }}
-          cache-from: type=gha,scope=${{ inputs.dir }}
-          cache-to: type=gha,scope=${{ inputs.dir }},mode=min
-
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/trivy
-          key: trivy-db-${{ github.run_id }}
-          restore-keys: trivy-db-
-      - uses: aquasecurity/trivy-action@v0.36.0
-        continue-on-error: true          # TODO: remove to re-enable the gate
-        with:
-          image-ref: ${{ env.IMAGE }}
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '1'
-
-      - if: github.event_name != 'pull_request'
-        run: docker push ${{ env.IMAGE }}
+      id-token: write
+    with:
+      dir: ${{ inputs.dir }}
+      tag: ${{ inputs.tag }}
+      push: ${{ github.event_name != 'pull_request' }}
+    secrets: inherit

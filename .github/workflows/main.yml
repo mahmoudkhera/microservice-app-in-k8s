@@ -191,7 +191,7 @@ jobs:
               echo "All services responding"
               exit 0
             fi
-            sleep 2
+            sleep 1
           done
           echo "::error::services did not become healthy in time"
           exit 1

@@ -13,12 +13,18 @@ on:
     outputs:
       digest:
         value: ${{ jobs.build.outputs.digest }}
+
+
 jobs:
   sast:
     if: inputs.run_checks
     uses: ./.github/workflows/sast.yaml
     with:
       dir: ${{ inputs.dir }}
+
+
+
+
 
   deps:
     if: inputs.run_checks
@@ -33,16 +39,15 @@ jobs:
       run:
         working-directory: ${{ inputs.dir }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: ${{ inputs.dir }}/requirements.txt
-      - run: pip install -r requirements.txt
-      - run: echo " python unit test part "
-
-
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ inputs.dir }}/package-lock.json
+      - run: npm ci
+      - run: echo " not tests not implemented yet  just the job demo"
+    
   build:
     needs: [sast, deps, test]
     # run when checks passed OR were skipped (run_checks=false); stop on failure

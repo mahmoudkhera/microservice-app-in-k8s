@@ -1,0 +1,75 @@
+name: build
+on:
+  workflow_call:
+    inputs:
+      dir:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+      push:
+        type: boolean
+        default: true
+    outputs:
+      image:
+        value: ${{ jobs.image.outputs.image }}
+      digest:
+        value: ${{ jobs.image.outputs.digest }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write                    # keyless cosign (drop if you use --key awskms://)
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/${{ inputs.dir }}:${{ inputs.tag }}
+    outputs:
+      image: ${{ env.IMAGE }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.dir }}
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=${{ inputs.dir }}
+          cache-to: type=gha,scope=${{ inputs.dir }},mode=min
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true          # TODO: remove to re-enable the gate
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: push
+        id: push
+        if: inputs.push
+        run: |
+          docker push "$IMAGE"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - uses: sigstore/cosign-installer@v3
+        if: inputs.push
+
+      - name: sign
+        if: inputs.push
+        run: cosign sign --yes "${IMAGE%%:*}@${{ steps.push.outputs.digest }}"
