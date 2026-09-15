@@ -1,0 +1,158 @@
+{{- if and .Values.inventory.enabled .Values.inventory.config }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ .Values.inventory.name }}-config
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "inventory.selectorLabels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.inventory.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.inventory.enabled }}
+{{- with .Values.inventory.sealedSecret }}
+{{- if .enabled }}
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: {{ .name }}
+  namespace: {{ include "app.namespace" $ }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    {{- include "inventory.selectorLabels" $ | nindent 4 }}
+  {{- if .clusterWide }}
+  annotations:
+    # Only valid if the ciphertext was produced with --scope cluster-wide.
+    sealedsecrets.bitnami.com/cluster-wide: "true"
+  {{- end }}
+spec:
+  encryptedData:
+    {{- range $key, $value := .encryptedData }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  # Shape of the Secret the controller unseals this into. name and namespace
+  # must match the SealedSecret above.
+  template:
+    metadata:
+      name: {{ .name }}
+      namespace: {{ include "app.namespace" $ }}
+      labels:
+        {{- include "app.labels" $ | nindent 8 }}
+        {{- include "inventory.selectorLabels" $ | nindent 8 }}
+    type: Opaque
+{{- end }}
+{{- end }}
+{{- end }}
+---
+{{- if .Values.inventory.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.inventory.name }}
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "inventory.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.inventory.replicas }}
+  selector:
+    matchLabels:
+      {{- include "inventory.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.labels" . | nindent 8 }}
+        {{- include "inventory.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the ConfigMap changes - envFrom alone would not.
+        checksum/config: {{ .Values.inventory.config | toYaml | sha256sum }}
+        {{- with .Values.inventory.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: inventory
+          image: "{{ .Values.inventory.image.repository }}:{{ .Values.inventory.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ include "stockwatch.pullPolicy" (dict "svc" .Values.inventory "root" .) }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.inventory.containerPort }}
+              protocol: TCP
+          envFrom:
+            {{- if .Values.inventory.config }}
+            - configMapRef:
+                name: {{ .Values.inventory.name }}-config
+            {{- end }}
+            {{- if .Values.inventory.sealedSecret.enabled }}
+            - secretRef:
+                name: {{ .Values.inventory.sealedSecret.name }}
+            {{- end }}
+          {{- with .Values.inventory.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.inventory.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.inventory.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.inventory.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inventory.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inventory.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+---
+{{- if .Values.inventory.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.inventory.name }}
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "inventory.selectorLabels" . | nindent 4 }}
+  {{- with .Values.inventory.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.inventory.service.type | default "ClusterIP" }}
+  ports:
+    # The ingress references this port by name.
+    - name: http
+      port: {{ .Values.inventory.service.port | default .Values.inventory.containerPort }}
+      targetPort: http
+      protocol: TCP
+      {{- if and .Values.inventory.service.nodePort (eq .Values.inventory.service.type "NodePort") }}
+      nodePort: {{ .Values.inventory.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "inventory.selectorLabels" . | nindent 4 }}
+{{- end }}

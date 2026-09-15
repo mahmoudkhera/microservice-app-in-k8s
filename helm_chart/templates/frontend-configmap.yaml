@@ -1,9 +1,0 @@
-kind: ConfigMap 
-apiVersion: v1 
-metadata:
-  name: {{ .Values.frontend.configmap.name }}
-  namespace: {{ .Values.namespace }}
-data:
-  FRONTEND_PORT: {{ .Values.frontend.configmap.data.PORT | quote}}
-  FRONTEND_HOST: {{ .Values.frontend.configmap.data.HOST | quote}}
-  API: {{ .Values.frontend.configmap.data.API }}

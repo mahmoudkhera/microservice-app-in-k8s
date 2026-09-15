@@ -1,0 +1,197 @@
+
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  # Set to false when the namespace is managed elsewhere (terraform, argocd...).
+  create: true
+  name: test
+
+
+image:
+  # Per-service image.pullPolicy overrides this.
+  pullPolicy: IfNotPresent
+  # Names of pre-created docker-registry secrets, e.g. [{name: gitlab-registry}].
+  # Required if the GitLab registry project is private.
+  pullSecrets: []
+
+# Pod-level security context shared by every service.
+podSecurityContext: {}
+# Container-level security context shared by every service.
+securityContext: {}
+
+
+# frontend
+frontend:
+  enabled: true
+  # Deployment and Service name. Also the in-cluster DNS name, so changing it
+  name: frontend
+  replicas: 1
+  image:
+    repository: registry.gitlab.com/mahmoudkhera20/microservice-devops/frontend
+    tag: latest
+    pullPolicy: ""
+  containerPort: 8000
+  service:
+    type: ClusterIP
+    port: 8000
+    # Only used when type is NodePort; leave null to let k8s pick (30000-32767).
+    nodePort: null
+    annotations: {}
+
+  config:
+    FRONTEND_HOST: 0.0.0.0
+    FRONTEND_PORT: 8000
+    # The browser calls this, so it has to be reachable from outside the
+    # cluster. With the ingress below, /backend on the ALB hostname routes to
+    # the inventory service - a relative path works and needs no rebuild.
+    API: /backend
+  resources:
+    requests:
+      memory: 16Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+  # Probes are passed through verbatim. Set to {} to disable.
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+
+# inventory
+inventory:
+  enabled: true
+  name: inventory
+  replicas: 1
+  image:
+    repository: registry.gitlab.com/mahmoudkhera20/microservice-devops/inventory-service
+    tag: 20260726211815-b9d2f677
+    pullPolicy: ""
+  containerPort: 3001
+  service:
+    type: ClusterIP
+    port: 3001
+    nodePort: null
+    annotations: {}
+  config:
+    HOST: 0.0.0.0
+    PORT: 3001
+    CORS_ORIGIN: "*"
+    NOTIFICATION_URL: http://notifications:3002/notify
+    ALERT_RECIPIENT: mkmahmoud944@gmail.com
+  # Encrypted with kubeseal --scope cluster-wide (see generate_secret.sh), so
+  # the ciphertext survives a rename of the secret or the namespace.
+  sealedSecret:
+    enabled: true
+    name: database-secrets
+    clusterWide: true
+    encryptedData:
+      DATABASE_URL: AgAz/azZleRRzjWIgc9bkvJ5vjoGQYED3jDcw3secFpcvXjTv9rNvkJT/ABguXHxPRII9YEc87o6oMV5q+vuVFF03KuiniGsDECQ7wUFqM641UOeZ/rKpEcuZsL/Aa/6z6/qsNmL5lhnCtGen2bEoqMRLwq4VIcNr5feGRt385LvuBwfviL7mlTzYosDr99maTyxSbR4eQxyOTqipRRs7hKfPu0biqS+e+GkPaPN4Lmqtl10hdMvEkFo5W60IJ4igUHekFmDzDKrNVUs4hg+8QvYIqikBC7GBQRND8vCW+9yt6KJJslp9pRDf7INVj3KwdwrrTILtOrG1leTB65Ihcep/A9VLTfZTzffGAQgijqmDypO6SY2oOkXx/7NrEr66e2t7rwmuUBoA7FnlicCmXbbgTp3NjLQZ17UgTsXc7W0ha9DStbjJt4XbNLGZsuW0BuP+PrAPfNwbji/DjP49DBBjcg82VX0Quf/mckEhv2Jq6l0OAl/qeIuiV4Rd7kW7r4cIqx8CMvhUP2bKAGtfySrCEhX9NjRalFFDnENkEe5LEkzIDK4NSkPhH8xvxGmNVmN2DXueG0vu7m7EJ9P82qn7wW8Edn65Dq/exYX2OGZ5b/SVsFI6ITYCl3548aBF1tKwK55uaUUNJMoj8kDpTMZnDvDf8qFkpiWl8hHooEakR9ScjNNDsz1JHVOKkOj+IUxNrmRnX/or6MnDk1i8KYrPY7gI6z/NUzrENvFjIyyo7P3jdK+gDELqsdQvZel2qh0aipt/ASJJTXNZfmnoCYgavY22fWfL/brA8PiZ75SKh/SQQrYNwgwwlFlfEZIwfqBqFPKzfZC++wPVCyMn3fcstXm6OldYOoGZA==
+  resources:
+    requests:
+      memory: 16Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+
+
+
+# notifications
+notifications:
+  enabled: true
+  name: notifications
+  replicas: 1
+  image:
+    repository: registry.gitlab.com/mahmoudkhera20/microservice-devops/notifications-service
+    tag: latest
+    pullPolicy: ""
+  containerPort: 3002
+  service:
+    type: ClusterIP
+    port: 3002
+    nodePort: null
+    annotations: {}
+  config:
+    HOST: 0.0.0.0
+    PORT: 3002
+    SMTP_PORT: 587
+    SMTP_FROM: mahmoudkhera20@gmail.com
+  sealedSecret:
+    enabled: true
+    name: smtp-secrets
+    clusterWide: true
+    encryptedData:
+      SMTP_HOST: AgCCWCgA2sBGCf7qoOe+78YEqxhCtk26K8hkkGGKEaFa9mMAPxkVURzoTrNHWWLIUuXYeVpy5ZdsCm5JDJ2/BAsiDdhZRzHPYv0OzQmqMDWqSVxNV+zCLRMMdPprgQicPuittaI++wA422YLPY6A7l1leVL+oe5kZsYD7RzVi3ADhBQFBoOV3rqvsACKJ/JoIJGPeOO5sr/OUKlcPt/TKN9XYv8v19Sxa7gUY8oJDWGdsLvv1TnUOIhWPX3FCDLOTNk1kLzW9z+wCKcJQJvs2MyTIxGRMCDASVR1l5r3eF6pSQBMMHSALTj0ieJf2sTSK4zKBtdFf7XaKOz5GRQhvHRwg6SQq6xb5ZWEDGPAFG80guhuvXWRtj3g11T1sDuMOZQhafUYY6Ud43ZTIGTrh/4o+bUORnYE5TTBsPnWdwI3PQfdn3Bjad4mA2rCCDkKKIcZw5o9C24I2KvWpmzwF8UmQcVm4YZAINucgh8M4yTGHYb1aDgCRw3QwWDrFX7C8o6/vpJNLObQrr97H38f4ZWEx+QKZbNd/K019ubaOr+K5C6S23o3geTJEm+0EkzUhSjaz1oz8NYgz2piBCWWel7gBKh2G8PQIJJjLCHIkQ1PZPheUguFcpUrULrFQi+mPCIJQupu1XLYfeFp8RrMg5NsUZ2Ztav/YIUAXCALiBbNbb+wQQLRZI2Kw/pxU07Zu2ycPxUtPaMBGfQNCdrIRF1xvLj7oA==
+      SMTP_USER: AgAyVACePfgjNgNWs1IfUuK+32c2rWGMRTWt7PsC4yzG6Xh9tVPJtljc8w0ZpSKvcyHQ9SFhG8dXVKCknLP6SUty8a/KWvtXxOORSXArhHe67S+2t2gchuGY4oHQ7LNtV2sSm12bGTLFkGz/0X5NiQNU52Z4pDSp7Lk0NKtQrnThC5w9ZKYiNmCvk+mVXeK3gQjdZXzmJkAWGwGvJs7bnAbJQGVia7wNny3kAI0IuD/bJgtvCed7MbUUNI89Fscy8Y3NsSGnkQEX4I6pvdQnDKfsyOxKIPin3xqJVssfrna4SiIGFlJOYqZhpd3Dw52Fo5CGy9qmqqJPhVw+j7E6LgLu4IOqVHd6U0DMETgWHlJ2j3BFvnsdJzvohupYX4BJkLxu5fQsHrprqB8Q40+zM6qFs85Q3VJgBngenAOnaG+dMepuzUtWvTZ0jcp5lsfFEdMq5kIRkx5XYHCvDQbIstC3cwwAJLMckjDg/p0ueieOfXZHIo6jt2lyFfcweFRJ1ylzYZMWcof9OyY/YsOOrosoEgyk5XHQTuUcGc0v6X7LNgWhB/fxtOzL+YI4CJ3HGU8fH57Uyo/UZZqUllX5Selrf68/IK9/9EIpD7FwvXZp6Ln66biomUdq2ph6S1yO63Xnobs8MdRZuRYozZWB8t1GTrnz+dhRvJsTMZZSvSKNq4LznncjcdUx9JrqSG2DPPipy5yjbpLsNWkBxHCDBSzQ1bY/urRsgHM=
+      SMTP_PASSWORD: AgCMcw0NDvca7MRxZliQ6yp8JObfHcbwdJ5mUbJggxzdvYK27iLvmqexP4EgD3/UnzPNxdPLNDZNKmDApQRPdOo+mV3kd/cb2PCWGoh4araVExwJl9J3pJYSBVHsCyOkXKCeoVaMMniD3f//K0ix0W6OYMx338knPmBNCG8s0kvdTAnL2A1QfV7RAk0V7DfxCmKCKW1c/407c5wjZPAbeTG7+/luB1OO2Gx+xegs7egsv8XO9om0hwwwegeMn9/9/7r0a2BlidIrfcK8moBuqcbyRlQURbtyjPkTWF4Pv9XwWdAm7Yl7iW/sLZ/IHoouadJmwkJdSWz1eT3yfN5Fc1s05BYiCCIt96/mOz4JybfyWvPOykwaToE5nOd7PzF7gMEmQagZrqBwcNlRuNjyBnJkOUIxAAwf+B90IqWUNP4BP+8j0JL59BAKPdqfLvZZrhlcGBRhXuIuXK9lJ0DYAGbZSmDYQxIb4+vJ7U4a3giCQ9pas6Ebmo3RZJKFMIBTfV5NHRStoh1CuUfYhJ9+zCp2caTKT9CLfhoH5ywPVu91Dcz2n0HXM3W+3KPUh0GspGi/KZIOZl0ts8yD98b5Fi62AUz2pafZOWHGrItKg0LAOy3TIZXxzYNNZ9D0u4Exnp//ZgVjGHG5OlULkNkx1eLxFldtt5xXzI8g4u3XW6sMVBtPK9V7yFsyE+KjqxcDPg4Zzf2La6Y5fNPIC949j+ZIcRely98ixHh3G6QzCoVVAqw6Se2G8fV2nWdjZ+oO6+e+inSZjmx81se2QYtxVEM1gGJ57XonGENoQGAflImOwBWp8LPJ+/TwVN8=
+  resources:
+    requests:
+      memory: 16Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+  # No known health endpoint on this service, so no probes.
+  readinessProbe: {}
+  livenessProbe: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+
+
+
+# ingress - one ALB in front of frontend and inventory
+ingress:
+  enabled: true
+  name: app-ingress
+  className: nginx
+  # Leave empty to serve on the ALB's own DNS name with no host rule.
+  host: ""
+  # Share one ALB with the grafana ingress in the logging chart.
+  groupName: stockwatch
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+  #   alb.ingress.kubernetes.io/scheme: internet-facing
+  #   alb.ingress.kubernetes.io/target-type: ip
+  #   alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+  #   # ALB health checks are set per ingress, not per backend: every service
+  #   # behind this one must answer 200 on this path or its targets go unhealthy.
+  #   alb.ingress.kubernetes.io/healthcheck-path: /healthz
+  # # Evaluated in order, so the longest prefix goes first.
+  backendPath: /backend
+  frontendPath: /
+  pathType: Prefix

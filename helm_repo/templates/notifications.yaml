@@ -1,0 +1,159 @@
+{{- if and .Values.notifications.enabled .Values.notifications.config }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ .Values.notifications.name }}-config
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "notifications.selectorLabels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.notifications.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.notifications.enabled }}
+{{- with .Values.notifications.sealedSecret }}
+{{- if .enabled }}
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: {{ .name }}
+  namespace: {{ include "app.namespace" $ }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+    {{- include "notifications.selectorLabels" $ | nindent 4 }}
+  {{- if .clusterWide }}
+  annotations:
+    # Only valid if the ciphertext was produced with --scope cluster-wide.
+    sealedsecrets.bitnami.com/cluster-wide: "true"
+  {{- end }}
+spec:
+  encryptedData:
+    {{- range $key, $value := .encryptedData }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  # Shape of the Secret the controller unseals this into. name and namespace
+  # must match the SealedSecret above.
+  template:
+    metadata:
+      name: {{ .name }}
+      namespace: {{ include "app.namespace" $ }}
+      labels:
+        {{- include "app.labels" $ | nindent 8 }}
+        {{- include "notifications.selectorLabels" $ | nindent 8 }}
+    type: Opaque
+{{- end }}
+{{- end }}
+{{- end }}
+---
+{{- if .Values.notifications.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.notifications.name }}
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "notifications.selectorLabels" . | nindent 4 }}
+  {{- with .Values.notifications.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.notifications.service.type | default "ClusterIP" }}
+  ports:
+    # Not exposed through the ingress - inventory calls it in-cluster.
+    - name: http
+      port: {{ .Values.notifications.service.port | default .Values.notifications.containerPort }}
+      targetPort: http
+      protocol: TCP
+      {{- if and .Values.notifications.service.nodePort (eq .Values.notifications.service.type "NodePort") }}
+      nodePort: {{ .Values.notifications.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "notifications.selectorLabels" . | nindent 4 }}
+{{- end }}
+
+---
+{{- if .Values.notifications.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.notifications.name }}
+  namespace: {{ include "app.namespace" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- include "notifications.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.notifications.replicas }}
+  selector:
+    matchLabels:
+      {{- include "notifications.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.labels" . | nindent 8 }}
+        {{- include "notifications.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the ConfigMap changes - envFrom alone would not.
+        checksum/config: {{ .Values.notifications.config| toYaml | sha256sum }}
+        {{- with .Values.notifications.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: notifications
+          image: "{{ .Values.notifications.image.repository }}:{{ .Values.notifications.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ include "stockwatch.pullPolicy" (dict "svc" .Values.notifications "root" .) }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.notifications.containerPort }}
+              protocol: TCP
+          envFrom:
+            {{- if .Values.notifications.config }}
+            - configMapRef:
+                name: {{ .Values.notifications.name }}-config
+            {{- end }}
+            {{- if .Values.notifications.sealedSecret.enabled }}
+            - secretRef:
+                name: {{ .Values.notifications.sealedSecret.name }}
+            {{- end }}
+          {{- with .Values.notifications.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.notifications.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.notifications.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.notifications.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.notifications.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.notifications.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
