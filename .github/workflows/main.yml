@@ -42,10 +42,9 @@ jobs:
     steps:
       - id: tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.tag }}" = "latest" ]; then
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           else
-            # on PRs github.sha is a synthetic merge commit; use the real head
             sha="${{ github.event.pull_request.head.sha || github.sha }}"
             echo "tag=${sha::7}" >> "$GITHUB_OUTPUT"
           fi
@@ -53,17 +52,18 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      frontend:      ${{ steps.filter.outputs.frontend }}
-      inventory:     ${{ steps.filter.outputs.inventory }}
-      notifications: ${{ steps.filter.outputs.notifications }}
+      frontend:      ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend == 'true' }}
+      inventory:     ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.inventory == 'true' }}
+      notifications: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.notifications == 'true' }}
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0              
+          fetch-depth: 0
       - uses: dorny/paths-filter@v3
+        if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
-          base: ${{ github.ref_name }}  
+          base: ${{ github.ref_name }}
           filters: |
             frontend:
               - 'frontend/**'
@@ -74,7 +74,7 @@ jobs:
 
   frontend:
     needs: [meta, changes]
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     uses: ./.github/workflows/node-service.yml
     with:
       dir: frontend
@@ -140,13 +140,16 @@ jobs:
           MODE_TAG: ${{ inputs.tag || 'commit' }}      # push/PR runs have no input → behave like "commit"
         run: |
           REPO=${GITHUB_REPOSITORY##*/}
-
           last_tag() {
             curl -sf \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$1/versions?per_page=10" \
-            | jq -r '.[0].metadata.container.tags[0]'
+              "https://api.github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/$REPO%2F$1/versions?per_page=30" \
+            | jq -r '
+                [ .[]
+                  | .metadata.container.tags[]
+                  | select(test("^sha256-[0-9a-f]{64}\\.(sig|att|sbom)$") | not)
+                ] | first // empty'
           }
 
           fallback() {
