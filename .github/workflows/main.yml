@@ -263,7 +263,7 @@ jobs:
         with:
           app-id: ${{ vars.GITOPS_APP_ID }}
           private-key: ${{ secrets.GITOPS_APP_KEY }}
-          repositories: grade-gitops
+          repositories: grade-api-gitops
 
       - uses: sigstore/cosign-installer@v3
       - uses: imjasonh/setup-crane@v0.4
