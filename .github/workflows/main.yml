@@ -245,7 +245,7 @@ jobs:
       id-token: write
     env:
       SRC: ghcr.io/${{ github.repository }}                 # ghcr.io/mahmoudkhera/microservice-app-in-k8s
-      DST: ghcr.io/${{ github.repository_owner }}/grade-gitops
+      DST: ghcr.io/${{ github.repository_owner }}/grade-api-gitops
     steps:
       # Mint the App token first so both the registry login and the later gitops checkout use it
       - uses: actions/create-github-app-token@v2
