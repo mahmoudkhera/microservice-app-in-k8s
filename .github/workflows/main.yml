@@ -125,6 +125,9 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ github.sha }}
     outputs:
+      frontend_image:      ${{ steps.images.outputs.frontend }}       # ghcr.io/…/frontend:5e12dd8
+      inventory_image:     ${{ steps.images.outputs.inventory }}
+      notifications_image: ${{ steps.images.outputs.notifications }}
       frontend_digest:      ${{ steps.digests.outputs.frontend }}
       inventory_digest:     ${{ steps.digests.outputs.inventory }}
       notifications_digest: ${{ steps.digests.outputs.notifications }}
@@ -246,7 +249,7 @@ jobs:
         
 
   promote:
-    needs: [ integration]
+    needs: [integration]
     if: github.ref == 'refs/heads/main' && needs.integration.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -254,40 +257,36 @@ jobs:
       packages: write
       id-token: write
     env:
-      SRC: ghcr.io/${{ github.repository }}                 # ghcr.io/mahmoudkhera/microservice-app-in-k8s
+      SRC: ghcr.io/${{ github.repository }}
       DST: ghcr.io/${{ github.repository_owner }}/grade-api-gitops
     steps:
-      # Mint the App token first so both the registry login and the later gitops checkout use it
-      - uses: actions/create-github-app-token@v2
-        id: app
-        with:
-          app-id: ${{ vars.GITOPS_APP_ID }}
-          private-key: ${{ secrets.GITOPS_APP_KEY }}
-          repositories: microservice-app-in-k8s,grade-api-gitops
-
       - uses: sigstore/cosign-installer@v3
       - uses: imjasonh/setup-crane@v0.4
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: x-access-token
-          password: ${{ steps.app.outputs.token }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2a. Copy tested digests (+ .sig/.att) into the grade-gitops packages
-      - name: copy signed images
+      - name: copy signed images with their commit tag
         env:
+          FI: ${{ needs.integration.outputs.frontend_image }}
+          II: ${{ needs.integration.outputs.inventory_image }}
+          NI: ${{ needs.integration.outputs.notifications_image }}
           FD: ${{ needs.integration.outputs.frontend_digest }}
           ID: ${{ needs.integration.outputs.inventory_digest }}
           ND: ${{ needs.integration.outputs.notifications_digest }}
-          RUN: ${{ github.run_number }}
         run: |
-          copy() {   # $1=service  $2=digest
-            cosign copy --force "$SRC/$1@$2" "$DST/$1:staging"
-            crane tag "$DST/$1@$2" "staging-$RUN"
+          copy() {   # $1=service  $2=source image ref (repo:tag)  $3=digest
+            tag="${2##*:}"                      # 5e12dd8
+            suffix="sha256-${3#sha256:}"
+            echo "$1: $tag ($3)"
+            crane copy "$SRC/$1@$3"          "$DST/$1:$tag"
+            crane copy "$SRC/$1:$suffix.sig" "$DST/$1:$suffix.sig"
           }
-          copy frontend              "$FD"
-          copy inventory-service     "$ID"
-          copy notifications-service "$ND"
+          copy frontend              "$FI" "$FD"
+          copy inventory-service     "$II" "$ID"
+          copy notifications-service "$NI" "$ND"
 
 
 
