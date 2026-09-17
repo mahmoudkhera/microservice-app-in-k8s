@@ -263,13 +263,7 @@ jobs:
         with:
           app-id: ${{ vars.GITOPS_APP_ID }}
           private-key: ${{ secrets.GITOPS_APP_KEY }}
-          repositories: grade-api-gitops
-      - name: check package access
-        env: { TOKEN: "${{ steps.app.outputs.token }}" }
-        run: |
-          echo "$TOKEN" | crane auth login ghcr.io -u x-access-token --password-stdin
-          crane digest ghcr.io/mahmoudkhera/grade-api-gitops/frontend:bootstrap   
-          crane tag    ghcr.io/mahmoudkhera/grade-api-gitops/frontend:bootstrap probe  
+          repositories: microservice-app-in-k8s,grade-api-gitops
 
       - uses: sigstore/cosign-installer@v3
       - uses: imjasonh/setup-crane@v0.4
