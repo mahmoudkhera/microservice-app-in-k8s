@@ -25,7 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OWNER: mahmoudkhera
-      PKG_PREFIX: grade-api-gitops          # packages live at ghcr.io/mahmoudkhera/grade-api-gitops/<svc>
+      PKG_PREFIX: grade-api-gitops
+      REG: ghcr.io/mahmoudkhera/grade-api-gitops
     steps:
       - uses: actions/create-github-app-token@v2
         id: app
@@ -48,33 +49,26 @@ jobs:
           IN_INVENTORY:     ${{ inputs.inventory }}
           IN_NOTIFICATIONS: ${{ inputs.notifications }}
         run: |
-          # newest real tag (excludes cosign sha256-*.sig/.att) for a GHCR package
-          last_commit() {
+          last_commit() {   # $1 = package name
             curl -sf -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               "https://api.github.com/users/$OWNER/packages/container/$PKG_PREFIX%2F$1/versions?per_page=30" \
             | jq -r '[ .[] | .metadata.container.tags[]
                         | select(test("^sha256-[0-9a-f]{64}\\.(sig|att|sbom)$") | not)
-                        | select(. != "staging") ] | first // empty'
+                        | select(. != "staging" and . != "latest" and . != "bootstrap") ] | first // empty'
           }
-
-          resolve() {   # $1=service  $2=input
-            case "$2" in
-              last_commit) t=$(last_commit "$1") ;;
-              *)           t="$2" ;;
-            esac
-            [ -n "$t" ] || { echo "::error::could not resolve tag for $1"; exit 1; }
+          resolve() {   # $1=output name  $2=package name  $3=input
+            case "$3" in last_commit) t=$(last_commit "$2") ;; *) t="$3" ;; esac
+            [ -n "$t" ] || { echo "::error::could not resolve tag for $2"; exit 1; }
             echo "$1=$t" >> "$GITHUB_OUTPUT"
-            echo "$1 -> $t"
+            echo "$1 ($2) -> $t"
           }
-
-          resolve frontend              "$IN_FRONTEND"
-          resolve inventory-service     "$IN_INVENTORY"
-          resolve notifications-service "$IN_NOTIFICATIONS"
+          resolve frontend      frontend              "$IN_FRONTEND"
+          resolve inventory     inventory-service     "$IN_INVENTORY"
+          resolve notifications notifications-service "$IN_NOTIFICATIONS"
 
       - name: update values.yaml with yq
-        working-directory: helm_chart
+        working-directory: helm_repo/helm_chart
         env:
-          REG: ghcr.io/mahmoudkhera/grade-api-gitops
           FT: ${{ steps.tags.outputs.frontend }}
           IT: ${{ steps.tags.outputs.inventory }}
           NT: ${{ steps.tags.outputs.notifications }}
@@ -90,15 +84,15 @@ jobs:
           git diff
 
       - name: commit and push
-        working-directory: gitops
+        working-directory: helm_repo
         env:
           FT: ${{ steps.tags.outputs.frontend }}
-          IT: ${{ steps.tags.outputs.inventory-service }}
-          NT: ${{ steps.tags.outputs.notifications-service }}
+          IT: ${{ steps.tags.outputs.inventory }}
+          NT: ${{ steps.tags.outputs.notifications }}
         run: |
           git config user.name  "gitops-bot"
           git config user.email "gitops-bot@users.noreply.github.com"
-          git add helm_chart/values-frontend.yaml helm_chart/values-inventory.yaml helm_chart/values-notifactions.yaml
+          git add helm_chart/values.yaml
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
           git commit -m "deploy: frontend=$FT inventory=$IT notifications=$NT"
           git push
