@@ -92,7 +92,7 @@ jobs:
         run: |
           git config user.name  "gitops-bot"
           git config user.email "gitops-bot@users.noreply.github.com"
-           gitops/helm_repo
+          git add helm_repo/values.yaml
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
           git commit -m "deploy: frontend=$FT inventory=$IT notifications=$NT"
           git push
