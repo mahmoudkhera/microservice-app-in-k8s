@@ -54,7 +54,7 @@ jobs:
               "https://api.github.com/users/$OWNER/packages/container/$PKG_PREFIX%2F$1/versions?per_page=30" \
             | jq -r '[ .[] | .metadata.container.tags[]
                         | select(test("^sha256-[0-9a-f]{64}\\.(sig|att|sbom)$") | not)
-                        | select(. != "staging" and . != "latest" and . != "bootstrap") ] | first // empty'
+                        | select( . != "bootstrap") ] | first // empty'
           }
           resolve() {   # $1=output name  $2=package name  $3=input
             case "$3" in last_commit) t=$(last_commit "$2") ;; *) t="$3" ;; esac
@@ -69,17 +69,15 @@ jobs:
       - name: update values.yaml with yq
         working-directory: gitops/helm_repo
         env:
+          REG: ghcr.io/mahmoudkhera/grade-api-gitops
           FT: ${{ steps.tags.outputs.frontend }}
           IT: ${{ steps.tags.outputs.inventory }}
           NT: ${{ steps.tags.outputs.notifications }}
         run: |
           yq -i '
-            .frontend.image.repository      = strenv(REG) + "/frontend"              |
-            .frontend.image.tag             = strenv(FT)                             |
-            .inventory.image.repository     = strenv(REG) + "/inventory-service"     |
-            .inventory.image.tag            = strenv(IT)                             |
-            .notifications.image.repository = strenv(REG) + "/notifications-service" |
-            .notifications.image.tag        = strenv(NT)
+            .frontend.image      = strenv(REG) + "/frontend:"              + strenv(FT) |
+            .inventory.image     = strenv(REG) + "/inventory-service:"     + strenv(IT) |
+            .notifications.image = strenv(REG) + "/notifications-service:" + strenv(NT)
           ' values.yaml
           git diff
 
