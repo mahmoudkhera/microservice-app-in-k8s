@@ -34,12 +34,12 @@ jobs:
           app-id: ${{ vars.GITOPS_APP_ID }}
           private-key: ${{ secrets.GITOPS_APP_KEY }}
           repositories: grade-api-gitops
-
+     
       - uses: actions/checkout@v5
         with:
           repository: mahmoudkhera/grade-api-gitops
           token: ${{ steps.app.outputs.token }}
-          path: helm_repo
+          path: gitops
 
       - name: resolve tags
         id: tags
@@ -67,7 +67,7 @@ jobs:
           resolve notifications notifications-service "$IN_NOTIFICATIONS"
 
       - name: update values.yaml with yq
-        working-directory: helm_repo/helm_chart
+        working-directory: gitops/helm_repo
         env:
           FT: ${{ steps.tags.outputs.frontend }}
           IT: ${{ steps.tags.outputs.inventory }}
@@ -84,7 +84,7 @@ jobs:
           git diff
 
       - name: commit and push
-        working-directory: helm_repo
+        working-c: gitops
         env:
           FT: ${{ steps.tags.outputs.frontend }}
           IT: ${{ steps.tags.outputs.inventory }}
@@ -92,7 +92,7 @@ jobs:
         run: |
           git config user.name  "gitops-bot"
           git config user.email "gitops-bot@users.noreply.github.com"
-          git add helm_chart/values.yaml
+           gitops/helm_repo
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
           git commit -m "deploy: frontend=$FT inventory=$IT notifications=$NT"
           git push
