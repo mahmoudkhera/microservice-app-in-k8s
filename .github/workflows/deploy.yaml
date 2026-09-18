@@ -84,7 +84,7 @@ jobs:
           git diff
 
       - name: commit and push
-        working-c: gitops
+        working-directory: gitops
         env:
           FT: ${{ steps.tags.outputs.frontend }}
           IT: ${{ steps.tags.outputs.inventory }}
