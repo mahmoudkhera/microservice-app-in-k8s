@@ -71,17 +71,23 @@ jobs:
           resolve inventory-service     "$IN_INVENTORY"
           resolve notifications-service "$IN_NOTIFICATIONS"
 
-      - name: update values with yq
-        working-directory: gitops/helm_chart
+      - name: update values.yaml with yq
+        working-directory: helm_chart
         env:
+          REG: ghcr.io/mahmoudkhera/grade-api-gitops
           FT: ${{ steps.tags.outputs.frontend }}
-          IT: ${{ steps.tags.outputs.inventory-service }}
-          NT: ${{ steps.tags.outputs.notifications-service }}
+          IT: ${{ steps.tags.outputs.inventory }}
+          NT: ${{ steps.tags.outputs.notifications }}
         run: |
-          yq -i ".image_tag = strenv(FT)" values-frontend.yaml
-          yq -i ".image_tag = strenv(IT)" values-inventory.yaml
-          yq -i ".image_tag = strenv(NT)" values-notifactions.yaml
-          git diff --stat
+          yq -i '
+            .frontend.image.repository      = strenv(REG) + "/frontend"              |
+            .frontend.image.tag             = strenv(FT)                             |
+            .inventory.image.repository     = strenv(REG) + "/inventory-service"     |
+            .inventory.image.tag            = strenv(IT)                             |
+            .notifications.image.repository = strenv(REG) + "/notifications-service" |
+            .notifications.image.tag        = strenv(NT)
+          ' values.yaml
+          git diff
 
       - name: commit and push
         working-directory: gitops
