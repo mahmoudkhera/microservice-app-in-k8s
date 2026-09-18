@@ -1,124 +1,98 @@
-name: Deploy to gitops repo
+name: Deploy to GitOps
 
 on:
   workflow_dispatch:
     inputs:
-      deploy_type:
-        description: "Choose deployment type"
-        required: true
-        type: choice
-        options:
-          - latest       
-          - last_commit   
+      frontend:
+        description: "frontend tag: <tag> | latest | last_commit"
+        type: string
+        default: last_commit
+      inventory:
+        description: "inventory tag: <tag> | latest | last_commit"
+        type: string
+        default: last_commit
+      notifications:
+        description: "notifications tag: <tag> | latest | last_commit"
+        type: string
+        default: last_commit
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
-
-  deploy_latest:
+  deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.deploy_type == 'latest' }}
     env:
-      GIT_TOKEN: ${{ secrets.GITOPS_PAT }}
+      OWNER: mahmoudkhera
+      PKG_PREFIX: grade-api-gitops          # packages live at ghcr.io/mahmoudkhera/grade-api-gitops/<svc>
     steps:
-      - name: Clone GitOps repository
-        shell: bash
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_KEY }}
+          repositories: grade-api-gitops
 
+      - uses: actions/checkout@v5
+        with:
+          repository: mahmoudkhera/grade-api-gitops
+          token: ${{ steps.app.outputs.token }}
+          path: gitops
+
+      - name: resolve tags
+        id: tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IN_FRONTEND:      ${{ inputs.frontend }}
+          IN_INVENTORY:     ${{ inputs.inventory }}
+          IN_NOTIFICATIONS: ${{ inputs.notifications }}
         run: |
-          git config --global credential.helper store
-          echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+          # newest real tag (excludes cosign sha256-*.sig/.att) for a GHCR package
+          last_commit() {
+            curl -sf -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/users/$OWNER/packages/container/$PKG_PREFIX%2F$1/versions?per_page=30" \
+            | jq -r '[ .[] | .metadata.container.tags[]
+                        | select(test("^sha256-[0-9a-f]{64}\\.(sig|att|sbom)$") | not)
+                        | select(. != "staging") ] | first // empty'
+          }
 
-          rm -rf gitops
-          git clone https://github.com/mahmoudkhera/grade-api-gitops.git gitops
-          cd gitops/helm_chart
-          
+          resolve() {   # $1=service  $2=input
+            case "$2" in
+              last_commit) t=$(last_commit "$1") ;;
+              *)           t="$2" ;;
+            esac
+            [ -n "$t" ] || { echo "::error::could not resolve tag for $1"; exit 1; }
+            echo "$1=$t" >> "$GITHUB_OUTPUT"
+            echo "$1 -> $t"
+          }
 
-      - name: update  GitOps repository
+          resolve frontend              "$IN_FRONTEND"
+          resolve inventory-service     "$IN_INVENTORY"
+          resolve notifications-service "$IN_NOTIFICATIONS"
+
+      - name: update values with yq
         working-directory: gitops/helm_chart
+        env:
+          FT: ${{ steps.tags.outputs.frontend }}
+          IT: ${{ steps.tags.outputs.inventory-service }}
+          NT: ${{ steps.tags.outputs.notifications-service }}
         run: |
-          pwd
-          export FRONTEND_TAG=latest
-          export INVENTORY_TAG=latest
-          export NOTIFICATIONS_TAG=latest
+          yq -i ".image_tag = strenv(FT)" values-frontend.yaml
+          yq -i ".image_tag = strenv(IT)" values-inventory.yaml
+          yq -i ".image_tag = strenv(NT)" values-notifactions.yaml
+          git diff --stat
 
-          echo " edit SHA: $FRONTEND_TAG"
-          sed -i "s|image_tag: .*|image_tag: $FRONTEND_TAG|" values-frontend.yaml
-          
-          echo " edit SHA: $INVENTORY_TAG"
-          sed -i "s|image_tag: .*|image_tag: $INVENTORY_TAG|" values-inventory.yaml
-          
-          echo " edit SHA: $NOTIFICATIONS_TAG"
-          sed -i "s|image_tag: .*|image_tag: $NOTIFICATIONS_TAG|" values-notifactions.yaml
-
-      - name: commit and push to GitOps repository
-        working-directory: gitops/helm_chart
-        run: |          
-          git config --global user.name "mahmoud khera"
-          git config --global user.email "mahmoudkhera20@gmail.com"
-          git add values-frontend.yaml values-inventory.yaml values-notifactions.yaml
-
-          if git diff --cached --quiet; then
-          echo "No changes to commit"
-          exit 0
-          fi
-          git commit -m "Update image  $(git status |grep -oE "modified|workflows" | tr '\n' ' ')"
-          git push -f https://${GIT_TOKEN}@github.com/mahmoudkhera/grade-api-gitops.git main
-
-          echo " Deployed latest tag"
-
-
-  deploy_last_commit:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.deploy_type == 'last_commit' }}
-    env:
-      GIT_TOKEN: ${{ secrets.GITOPS_PAT }}
-    steps:
-      - name: Clone GitOps repository
-        shell: bash
-
+      - name: commit and push
+        working-directory: gitops
+        env:
+          FT: ${{ steps.tags.outputs.frontend }}
+          IT: ${{ steps.tags.outputs.inventory-service }}
+          NT: ${{ steps.tags.outputs.notifications-service }}
         run: |
-          git config --global credential.helper store
-          echo "https://${GIT_TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
-
-          rm -rf gitops
-          git clone https://github.com/mahmoudkhera/grade-api-gitops.git gitops
-          cd gitops/helm_chart
-          
-        
-      - name: update files to the latest version
-        working-directory: gitops/helm_chart
-        run : |
-          pwd
-          # Use current commit SHA as the tag
-          export FRONTEND_TAG=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-frontend/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
-          export INVENTORY_TAG=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-inventory/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
-          export NOTIFICATIONS_TAG=$(curl -s "https://hub.docker.com/v2/repositories/mahmoudkhera/devops2-notifications/tags?page_size=1&ordering=last_updated"   | jq  '.results[0].name')
-
-          echo " edit SHA: $FRONTEND_TAG"
-          sed -i "s|image_tag: .*|image_tag: $FRONTEND_TAG|" values-frontend.yaml
-          
-          echo " edit SHA: $INVENTORY_TAG"
-          sed -i "s|image_tag: .*|image_tag: $INVENTORY_TAG|" values-inventory.yaml
-          
-          echo " edit SHA: $NOTIFICATIONS_TAG"
-          sed -i "s|image_tag: .*|image_tag: $NOTIFICATIONS_TAG|" values-notifactions.yaml
-
-      - name: show images that updated 
-        working-directory: gitops/helm_chart
-        run:  echo -e "---image updated---\n$(git status | grep -oE "frontend|\inventory\|notifactions")"
-    
-      - name: commit and pusth to GitOps repository
-        working-directory: gitops/helm_chart
-        run: | 
-          git config --global user.name "mahmoud khera"
-          git config --global user.email "mahmoudkhera20@gmail.com"
-
-          git add values-frontend.yaml values-inventory.yaml values-notifactions.yaml
-
-          if git diff --cached --quiet; then
-          echo "No changes to commit"
-          exit 0
-          fi
-
-          git commit -m "Update image  $(git status |grep -oE "modified|workflows" | tr '\n' ' ')"
-          git push -f https://${GIT_TOKEN}@github.com/mahmoudkhera/grade-api-gitops.git main
-
-          echo " Deployed commit SHA: $FRONTEND_TAG"
+          git config user.name  "gitops-bot"
+          git config user.email "gitops-bot@users.noreply.github.com"
+          git add helm_chart/values-frontend.yaml helm_chart/values-inventory.yaml helm_chart/values-notifactions.yaml
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "deploy: frontend=$FT inventory=$IT notifications=$NT"
+          git push
