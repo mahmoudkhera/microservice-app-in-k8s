@@ -17,7 +17,7 @@ on:
         default: last_commit
 
 permissions:
-  contents: read
+  contents: write 
   packages: read
 
 jobs:
@@ -38,12 +38,12 @@ jobs:
         with:
           repository: mahmoudkhera/grade-api-gitops
           token: ${{ steps.app.outputs.token }}
-          path: gitops
+          path: helm_repo
 
       - name: resolve tags
         id: tags
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_PAT }}
           IN_FRONTEND:      ${{ inputs.frontend }}
           IN_INVENTORY:     ${{ inputs.inventory }}
           IN_NOTIFICATIONS: ${{ inputs.notifications }}
